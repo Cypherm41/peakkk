@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Banners of Peakkk — Medieval RTS</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="topbar">
+    <div class="res" id="res-food" title="Food — trains builders, swordsmen, spearmen, cavalry"><span>🌾</span><b>0</b></div>
+    <div class="res" id="res-wood" title="Wood — buildings, spearmen, archers, ships"><span>🪵</span><b>0</b></div>
+    <div class="res" id="res-gold" title="Gold — soldiers and upgrades"><span>🪙</span><b>0</b></div>
+    <div class="res" id="res-stone" title="Stone — barracks, towers, town centers, ports"><span>🪨</span><b>0</b></div>
+    <div class="res" id="res-pop" title="Population / capacity — build houses to raise the cap"><span>👥</span><b>0/0</b></div>
+    <div class="spacer"></div>
+    <button id="btn-idle" class="tb" title="Select an idle builder (.)">👷 Idle <b id="idle-count">0</b></button>
+    <button id="btn-speed" class="tb" title="Game speed">⏩ 1x</button>
+    <button id="btn-pause" class="tb" title="Pause (P)">⏸</button>
+    <button id="btn-help" class="tb" title="Controls (F1)">?</button>
+    <div id="clock">0:00</div>
+  </div>
+
+  <div id="bottombar">
+    <div id="minimap-wrap"><canvas id="minimap" width="260" height="130"></canvas></div>
+    <div id="info"></div>
+    <div id="cmds"></div>
+  </div>
+
+  <div id="tooltip"></div>
+  <div id="toasts"></div>
+  <div id="modeHint"></div>
+
+  <div id="overlay">
+    <div class="panel" id="menu">
+      <h1>Banners of Peakkk</h1>
+      <p class="sub">A medieval real-time strategy game. Lead the <b class="g">Green</b> kingdom against the <b class="y">Yellow</b> realm.</p>
+      <div class="row">
+        <span>Difficulty</span>
+        <button class="diff" data-d="easy">Easy</button>
+        <button class="diff sel" data-d="normal">Normal</button>
+        <button class="diff" data-d="hard">Hard</button>
+      </div>
+      <button id="btn-start" class="big">Start Game</button>
+      <ul class="tips">
+        <li>Train <b>builders</b> at the Town Center and put them to work: chop trees, build farms, mine gold and stone.</li>
+        <li>Build <b>houses</b> before you hit the population cap, and <b>storehouses</b> next to forests and mines.</li>
+        <li>Raise an army from the <b>Barracks</b>, <b>Archery Range</b> and <b>Stable</b>. Swordsmen beat spearmen, spearmen beat cavalry, cavalry beat archers, archers beat swordsmen.</li>
+        <li>Destroy every Yellow building to win. Press <b>F1</b> in game for all controls.</li>
+      </ul>
+    </div>
+    <div class="panel hidden" id="endpanel">
+      <h1 id="endtitle">Victory!</h1>
+      <p class="sub" id="endsub"></p>
+      <button id="btn-again" class="big">Play Again</button>
+    </div>
+    <div class="panel hidden" id="helppanel">
+      <h2>Controls</h2>
+      <table>
+        <tr><td>Left click / drag</td><td>Select units or buildings (double click selects all of a type on screen)</td></tr>
+        <tr><td>Right click</td><td>Move · attack · gather · build / repair · set rally point for a selected building</td></tr>
+        <tr><td>WASD / arrows / screen edge</td><td>Scroll the map (middle mouse drag also pans)</td></tr>
+        <tr><td>Mouse wheel</td><td>Zoom</td></tr>
+        <tr><td>Q W E R / A S D F / Z X C V</td><td>Command card hotkeys (the key shown on each button)</td></tr>
+        <tr><td>Shift + click / train</td><td>Keep placing buildings · train 5 units at once</td></tr>
+        <tr><td>A, then click</td><td>Attack-move: soldiers fight anything on the way</td></tr>
+        <tr><td>S</td><td>Stop (soldiers selected)</td></tr>
+        <tr><td>1–9 · Ctrl/Shift + 1–9</td><td>Recall · assign a control group</td></tr>
+        <tr><td>. (period)</td><td>Select next idle builder</td></tr>
+        <tr><td>Space</td><td>Jump to selection (or Town Center)</td></tr>
+        <tr><td>P · Esc</td><td>Pause · cancel placement / deselect</td></tr>
+      </table>
+      <button id="btn-closehelp" class="big">Close</button>
+    </div>
+  </div>
+
+  <script src="js/game.js"></script>
+  <script src="js/ui.js"></script>
+</body>
+</html>
