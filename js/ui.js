@@ -705,7 +705,10 @@ function pickAt(sx, sy) {
   return null;
 }
 
-function setSel(list) { sel = list; cmdSig = ''; }
+function setSel(list) {
+  sel = list; cmdSig = '';
+  if (game) { renderInfo(); renderCmds(); }   // refresh now, so hotkeys right after a selection act on the new command card
+}
 function selectUnitsInBox(x0, y0, x1, y1, add) {
   const xa = Math.min(x0, x1), xb = Math.max(x0, x1), ya = Math.min(y0, y1), yb = Math.max(y0, y1);
   const found = game.units.filter((u) => {
@@ -761,7 +764,7 @@ function rightClick(sx, sy) {
   }
   if (sel.length === 1 && sel[0].kind === 'building' && sel[0].team === 0 && sel[0].done && sel[0].def.trains) {
     const b = sel[0];
-    b.rally = { x: w.x, y: w.y, target: tgt && (tgt.kind === 'node' || tgt.type === 'farm') ? tgt : null };
+    game.setRally(b, w.x, w.y, tgt && (tgt.kind === 'node' || tgt.type === 'farm') ? tgt : null);
     addFx(w.x, w.y, '#9af0a6'); toast('Rally point set'); sfx('order');
   }
 }
@@ -862,7 +865,7 @@ function unitStatus(u) {
     case 'move': return 'Moving';
     case 'attackmove': return 'Attack-moving';
     case 'attack': return 'Attacking';
-    case 'build': return u.target && u.target.done ? 'Repairing' : 'Building';
+    case 'build': return u.targetDone ? 'Repairing' : 'Building';
     case 'gather': return ({ wood: 'Chopping wood', food: 'Farming', gold: 'Mining gold', stone: 'Quarrying stone' }[u.gatherKind] || 'Gathering') + (u.sub === 'toDrop' ? ' (returning)' : '');
   }
   return '';
@@ -1150,6 +1153,7 @@ function frame(ts) {
       let rem = dtReal * speed;
       while (rem > 0) { const s = Math.min(0.05, rem); game.update(s); rem -= s; }
     }
+    game.sync();   // pull the C simulation's state into JS objects once per frame
     cameraTick(dtReal);
     processEvents();
     for (let i = clickFx.length - 1; i >= 0; i--) { clickFx[i].t += dtReal; if (clickFx[i].t > 0.7) clickFx.splice(i, 1); }
@@ -1175,4 +1179,8 @@ function frame(ts) {
 
 resize();
 showPanel('menu');
+// The simulation is a WebAssembly module compiled from C; wait for it before allowing a game to start.
+$('btn-start').disabled = true; $('btn-start').textContent = 'Loading…';
+gameReady.then(() => { $('btn-start').disabled = false; $('btn-start').textContent = 'Start Game'; })
+  .catch((err) => { $('btn-start').textContent = 'Failed to load game core'; console.error(err); });
 requestAnimationFrame(frame);

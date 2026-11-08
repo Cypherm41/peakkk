@@ -76,7 +76,10 @@
     </div>
   </div>
 
-  <script src="js/game.js"></script>
+  <!-- data tables, then the C simulation (compiled to WebAssembly and embedded so this works from file://), then the renderer -->
+  <script src="js/defs.js"></script>
+  <script src="js/wasm_blob.js"></script>
+  <script src="js/game_wasm.js"></script>
   <script src="js/ui.js"></script>
 </body>
 </html>
