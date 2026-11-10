@@ -30,6 +30,8 @@ js/game_wasm.js   JS bridge: loads the wasm and exposes the game state to the UI
 js/wasm_blob.js   the compiled game.wasm, embedded as base64 (generated)
 js/ui.js          isometric renderer, minimap, HUD, input
 tests/sim_test.c  native C tests
+sdl/              native SDL2 front end (see below): ui.h input + HUD, render.h world drawing, gfx.h 2D batch layer, main.c
+tests/sdl_smoke.c headless smoke test of the SDL2 front end
 ```
 
 ## Building and testing
@@ -47,3 +49,20 @@ make clean
 The native tests include the real `c/game.c`, so they test exactly the code that ships. They check map generation, pathfinding between the bases, gathering and farming, combat counters, and full AI-vs-AI games on Normal and Hard, plus an idle player against the AI on every difficulty.
 
 To change a unit's stats or a building's cost, edit `js/defs.js` and run `make`.
+
+## Native SDL2 front end
+
+The same C simulation also runs as a desktop game, with the browser UI replaced by an SDL2 one (`sdl/`). It links `c/game.c` as a separate object and talks to it through the same `g_*` functions the WebAssembly build exports (declared in `sdl/sim.h`), so both front ends play identically.
+
+Requirements: SDL2 >= 2.0.18 with development files (`libsdl2-dev` on Debian/Ubuntu) and a C compiler.
+
+```
+make sdl            # build build/peakkk_sdl
+make run-sdl        # build and start it
+make test-sdl       # headless smoke test: injects mouse / keyboard events into the real UI (no display needed)
+./build/peakkk_sdl --start --difficulty hard --seed 7
+```
+
+Controls are the same as in the browser (press **F1**), except that the HUD uses a built-in ASCII bitmap font, so units, buildings and commands are labelled with letters and short names instead of emoji. Sound uses the same tiny synth as the web version; if no audio device can be opened the game just runs silent. `--frames N --shot out.bmp` runs N frames at a fixed timestep and saves a screenshot, which is handy for CI.
+
+`sdl/gamedata.h` (names, descriptions, team colours) is generated from `js/defs.js` by `tools/gen_sdl_data.js`; `make` keeps it up to date.

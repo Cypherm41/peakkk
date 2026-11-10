@@ -1,14 +1,21 @@
 # Banners of Peakkk — build helpers.
 #   make          regenerate c/defs.h, build game.wasm and embed it in js/wasm_blob.js
 #   make test     build + run the native C tests (gcc)
+#   make sdl      build the native SDL2 front end: build/peakkk_sdl   (make run-sdl to build and start it)
+#   make test-sdl build + run the headless SDL2 front-end smoke test
 #   make clean
 #
-# Needs: node (code generation), clang with the wasm32 target + wasm-ld (WebAssembly build), gcc or clang (tests).
+# Needs: node (code generation), clang with the wasm32 target + wasm-ld (WebAssembly build), gcc or clang (tests),
+#        SDL2 >= 2.0.18 development files (SDL2 front end; found with sdl2-config / pkg-config).
 # Open index.html directly in a browser to play; the committed js/wasm_blob.js already contains the compiled core.
 
 CC_NATIVE ?= gcc
 CLANG     ?= clang
 CFLAGS    := -std=c99 -O2 -fno-math-errno -Wall -Wextra -Wno-unused-function
+
+SDL_CFLAGS := $(shell sdl2-config --cflags 2>/dev/null || pkg-config --cflags sdl2 2>/dev/null)
+SDL_LIBS   := $(shell sdl2-config --libs 2>/dev/null || pkg-config --libs sdl2 2>/dev/null)
+SDL_SRC    := $(wildcard sdl/*.h)
 
 all: wasm
 
@@ -34,7 +41,31 @@ build/sim_test: tests/sim_test.c c/game.c c/defs.h
 test: build/sim_test
 	./build/sim_test
 
+# ---- native SDL2 front end ----
+# game.c is compiled as its own object: the front end only sees the g_* functions declared in sdl/sim.h,
+# the same boundary the WebAssembly build exposes to js/game_wasm.js.
+sdl/gamedata.h: js/defs.js tools/gen_sdl_data.js
+	node tools/gen_sdl_data.js
+
+build/game_native.o: c/game.c c/defs.h
+	@mkdir -p build
+	$(CC_NATIVE) $(CFLAGS) -Ic -c c/game.c -o $@
+
+build/peakkk_sdl: sdl/main.c $(SDL_SRC) c/defs.h build/game_native.o
+	$(CC_NATIVE) $(CFLAGS) -Isdl -Ic $(SDL_CFLAGS) sdl/main.c build/game_native.o -o $@ $(SDL_LIBS) -lm
+
+sdl: build/peakkk_sdl
+
+run-sdl: sdl
+	./build/peakkk_sdl
+
+build/sdl_smoke: tests/sdl_smoke.c $(SDL_SRC) c/defs.h build/game_native.o
+	$(CC_NATIVE) $(CFLAGS) -Isdl -Ic $(SDL_CFLAGS) tests/sdl_smoke.c build/game_native.o -o $@ $(SDL_LIBS) -lm
+
+test-sdl: build/sdl_smoke
+	SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ./build/sdl_smoke
+
 clean:
 	rm -rf build
 
-.PHONY: all wasm test clean
+.PHONY: all wasm test sdl run-sdl test-sdl clean
