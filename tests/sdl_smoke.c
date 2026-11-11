@@ -215,6 +215,10 @@ int main(int argc, char **argv) {
   key(SDL_SCANCODE_ESCAPE, 0);
   CHECK(overlayPanel == PANEL_NONE, "Esc closes help");
 
+  key(SDL_SCANCODE_F11, 0); key(SDL_SCANCODE_F11, 0);            /* toggle fullscreen twice (a no-op for the dummy driver): must not disturb the game */
+  step(1);
+  CHECK(inGame && screen == SCR_PLAY && overlayPanel == PANEL_NONE, "F11 leaves the game state alone");
+
   /* ---- an idle player against the AI: run 4 simulated minutes, drawing now and then ---- */
   step(1); shot(shots, "play");
   for (int m = 0; m < 8; m++) { step_sim(30); step(1); }

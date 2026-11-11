@@ -861,6 +861,7 @@ static const char *HELP_ROWS[][2] = {
   { ". (period)", "Select next idle builder" },
   { "Space", "Jump to selection (or Town Center)" },
   { "P, Esc, M", "Pause, cancel placement / deselect, sound on / off" },
+  { "F1, F11", "This help, fullscreen on / off" },
 };
 #define HELP_N ((int)(sizeof HELP_ROWS / sizeof HELP_ROWS[0]))
 
@@ -913,7 +914,7 @@ static void draw_menu(void) {
     int n = text_wrap(p.x + 50, y, p.w - 80, 2, 0xcdbd93, 1, tips[i], 1);
     y += n * 20 + 8;
   }
-  text_center(p.x + p.w / 2, p.y + p.h - 22, 1, 0x8f7f5a, 1, "Enter: start   F1: controls (in game)   Esc: close panels");
+  text_center(p.x + p.w / 2, p.y + p.h - 22, 1, 0x8f7f5a, 1, "Enter: start   F1: controls (in game)   F11: fullscreen");
 }
 
 static void draw_help(void) {
@@ -1043,6 +1044,11 @@ static void on_mouse_up(int button, int shift) {
 
 static void on_key(SDL_Scancode sc, int mod) {
   int shift = (mod & KMOD_SHIFT) != 0, ctrl = (mod & (KMOD_CTRL | KMOD_GUI)) != 0;
+  if (sc == SDL_SCANCODE_F11) {                                  /* works on every screen, including the menu */
+    int fs = (SDL_GetWindowFlags(gWin) & SDL_WINDOW_FULLSCREEN_DESKTOP) == SDL_WINDOW_FULLSCREEN_DESKTOP;
+    SDL_SetWindowFullscreen(gWin, fs ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP);
+    return;
+  }
   if (sc == SDL_SCANCODE_F1) {
     if (screen != SCR_PLAY) return;
     overlayPanel = overlayPanel == PANEL_HELP ? PANEL_NONE : overlayPanel == PANEL_NONE ? PANEL_HELP : overlayPanel;

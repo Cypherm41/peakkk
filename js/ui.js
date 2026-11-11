@@ -1129,8 +1129,10 @@ function cameraTick(dt) {
 
 /* --------------------------------- Main loop ----------------------------- */
 
+let endShown = false;   // the end panel opens once per game, so 'Play Again' can reach the menu
 function startGame(diff) {
   game = new Game({ difficulty: diff });
+  endShown = false;
   sel = []; placing = null; cmdMode = null; paused = false; speed = 1; zoom = 1; cmdSig = '';
   pings.length = 0; clickFx.length = 0; for (const k in groups) delete groups[k];
   $('btn-pause').textContent = '⏸'; $('btn-speed').textContent = '⏩ 1x';
@@ -1161,7 +1163,8 @@ function frame(ts) {
     if (placing) updatePlacing();
     hudTimer -= dtReal;
     if (hudTimer <= 0) { hudTimer = 0.2; updateHud(); }
-    if (game.winner !== null && $('endpanel').classList.contains('hidden')) {
+    if (game.winner !== null && !endShown) {
+      endShown = true;
       const won = game.winner === 0;
       $('endtitle').textContent = won ? 'Victory!' : 'Defeat';
       $('endtitle').style.color = won ? '#9af0a6' : '#ff8e7e';
