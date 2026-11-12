@@ -65,7 +65,15 @@ build/sdl_smoke: tests/sdl_smoke.c $(SDL_SRC) c/defs.h build/game_native.o
 test-sdl: build/sdl_smoke
 	SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ./build/sdl_smoke
 
+# random-input fuzz of the front end under ASan + UBSan (game.c is rebuilt with the sanitizers too)
+build/sdl_fuzz: tests/sdl_fuzz.c $(SDL_SRC) c/defs.h c/game.c
+	@mkdir -p build
+	$(CC_NATIVE) -std=c99 -O1 -g -fno-math-errno -fsanitize=address,undefined -fno-sanitize-recover=undefined -Isdl -Ic $(SDL_CFLAGS) tests/sdl_fuzz.c c/game.c -o $@ $(SDL_LIBS) -lm
+
+fuzz-sdl: build/sdl_fuzz
+	SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ASAN_OPTIONS=detect_leaks=0 ./build/sdl_fuzz
+
 clean:
 	rm -rf build
 
-.PHONY: all wasm test sdl run-sdl test-sdl clean
+.PHONY: all wasm test sdl run-sdl test-sdl fuzz-sdl clean

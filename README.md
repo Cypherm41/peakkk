@@ -60,6 +60,7 @@ Requirements: SDL2 >= 2.0.18 with development files (`libsdl2-dev` on Debian/Ubu
 make sdl            # build build/peakkk_sdl
 make run-sdl        # build and start it
 make test-sdl       # headless smoke test: injects mouse / keyboard events into the real UI (no display needed)
+make fuzz-sdl       # random-input fuzz of the UI under ASan + UBSan (./build/sdl_fuzz [events] [seed])
 ./build/peakkk_sdl --start --difficulty hard --seed 7
 ```
 
