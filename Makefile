@@ -17,10 +17,20 @@ SDL_CFLAGS := $(shell sdl2-config --cflags 2>/dev/null || pkg-config --cflags sd
 SDL_LIBS   := $(shell sdl2-config --libs 2>/dev/null || pkg-config --libs sdl2 2>/dev/null)
 SDL_SRC    := $(wildcard sdl/*.h)
 
+# Node is only needed to regenerate c/defs.h and sdl/gamedata.h after editing js/defs.js. Both generated files are
+# committed, so without node the build just uses them (a fresh clone has arbitrary timestamps, which would otherwise
+# make make think they are stale).
+NODE      ?= node
+HAVE_NODE := $(shell command -v $(NODE) >/dev/null 2>&1 && echo yes)
+
 all: wasm
 
 c/defs.h: js/defs.js tools/gen_defs.js
-	node tools/gen_defs.js
+ifeq ($(HAVE_NODE),yes)
+	$(NODE) tools/gen_defs.js
+else
+	@echo "node not found: using the committed $@ (install node to regenerate it after editing js/defs.js)"; touch $@
+endif
 
 build/game.wasm: c/game.c c/defs.h
 	@mkdir -p build
@@ -45,7 +55,11 @@ test: build/sim_test
 # game.c is compiled as its own object: the front end only sees the g_* functions declared in sdl/sim.h,
 # the same boundary the WebAssembly build exposes to js/game_wasm.js.
 sdl/gamedata.h: js/defs.js tools/gen_sdl_data.js
-	node tools/gen_sdl_data.js
+ifeq ($(HAVE_NODE),yes)
+	$(NODE) tools/gen_sdl_data.js
+else
+	@echo "node not found: using the committed $@ (install node to regenerate it after editing js/defs.js)"; touch $@
+endif
 
 build/game_native.o: c/game.c c/defs.h
 	@mkdir -p build
