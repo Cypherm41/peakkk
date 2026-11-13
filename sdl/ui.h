@@ -500,7 +500,7 @@ static void ui_start_game(int diff, unsigned seed) {
   g_init(seed, diff, 1 << 1);
   model_bind_terrain();
   nSel = 0; nEvQueue = 0; placingOn = 0; cmdAttackMove = 0; paused = 0; speedMul = 1; zoom = 1;
-  nPings = 0; nClickFx = 0; nToasts = 0; idleIdx = 0; endShown = 0;
+  nPings = 0; nClickFx = 0; nToasts = 0; idleIdx = 0; endShown = 0; hoverId = 0;
   memset(groupN, 0, sizeof groupN);
   mouse.down = mouse.mid = mouse.drag = mouse.onMini = 0;
   model_sync();
@@ -547,6 +547,7 @@ static void ui_update(float dt) {
   for (int i = nClickFx - 1; i >= 0; i--) { clickFx[i].t += dt; if (clickFx[i].t > 0.7f) { memmove(clickFx + i, clickFx + i + 1, (size_t)(nClickFx - i - 1) * sizeof(Fx)); nClickFx--; } }
   for (int i = nPings - 1; i >= 0; i--) { pings[i].t += dt; if (pings[i].t > 1.5f) { memmove(pings + i, pings + i + 1, (size_t)(nPings - i - 1) * sizeof(Fx)); nPings--; } }
   if (placingOn) update_placing();
+  hoverId = (mouse.seen && !overlay_open() && !placingOn && !mouse.drag && !mouse.mid && in_world(mouse.y)) ? pick_at(mouse.x, mouse.y) : 0;
   if (diffToastTimer > 0 && (diffToastTimer -= dt) <= 0) toast(0, "Enemy difficulty: %s", DIFF_NAME[diffChoice]);
   check_end();
   get_commands();
@@ -832,12 +833,40 @@ static void draw_bottom_bar(void) {              /* background only: the minimap
   fill_rect(0, bottom_y(), W, 3, 0x8a6a3a, 1);
 }
 
+/* small tooltip next to the cursor naming what is under it: unit / building / resource, owner and health */
+static void draw_hover_tip(void) {
+  if (!hoverId) return;
+  char head[64], detail[96];
+  const FUnit *u = get_unit(hoverId); const FBld *b = get_bld(hoverId); const FNode *n = get_node(hoverId);
+  unsigned hc = 0xffe9a8;
+  if (u) {
+    snprintf(head, sizeof head, "%s (%s)", UNIT_NAME[u->type], TEAM_NAME[u->team]);
+    snprintf(detail, sizeof detail, "HP %d/%d", (int)ceilf(u->hp), (int)u->maxHp);
+    if (u->team == 1) hc = 0xff8e7e;
+  } else if (b) {
+    snprintf(head, sizeof head, "%s (%s)", BLD_NAME[b->type], TEAM_NAME[b->team]);
+    if (b->done) snprintf(detail, sizeof detail, "HP %d/%d", (int)ceilf(b->hp), (int)b->maxHp);
+    else snprintf(detail, sizeof detail, "Under construction %d%%", (int)floorf(b->progress * 100));
+    if (b->team == 1) hc = 0xff8e7e;
+  } else if (n) {
+    const char *res[3] = { "wood", "gold", "stone" };
+    snprintf(head, sizeof head, "%s", NODE_NAME[n->type]);
+    snprintf(detail, sizeof detail, "%d %s left", (int)ceilf(n->amt), res[n->type]);
+  } else return;
+  float w = fmaxf(text_width(head, 2), text_width(detail, 1)) + 20, h = 44;
+  float x = clampf(mouse.x + 16, 4, W - w - 4), y = clampf(mouse.y + 20, TOP_H + 4, H - BOTTOM_H - h - 4);
+  panel(x, y, w, h, 4, 0x140e08, 0xc9a566, 1);
+  text(x + 10, y + 7, 2, hc, 1, head);
+  text(x + 10, y + 28, 1, 0xd9c9a0, 1, detail);
+}
+
 static void draw_hud(void) {
   screen_begin();
   draw_info();
   draw_cmds();
   draw_topbar();
   draw_mode_hint();
+  draw_hover_tip();
   draw_toasts();
   gfx_flush();
 }

@@ -307,6 +307,23 @@ static void u_head(float y, int helmet) {
   if (helmet) { l_fill_arc(0, y - 0.4f, 3.9f, 3.9f, PI_F, 2 * PI_F, 0x9aa0a8, 1); l_rect(-3.9f, y - 0.6f, 7.8f, 1.3f, 0x9aa0a8, 1); }
 }
 
+/* outline of the entity under the cursor: a ring at a unit's feet, the footprint of a building or resource tile */
+static void draw_hover(int id) {
+  const FUnit *u = get_unit(id); const FBld *b = get_bld(id); const FNode *n = get_node(id);
+  if (u) {
+    unsigned col = u->team == 0 ? 0xbff5c4 : 0xff8e7e;
+    int big = UDEF[u->type].big;
+    stroke_ellipse(isoX(u->x, u->y), isoY(u->x, u->y) + 1, big ? 17 : 11, big ? 8 : 5.5f, 2, col, 0.95f);
+    return;
+  }
+  float x0, y0, w, h; unsigned col;
+  if (b) { x0 = (float)b->x; y0 = (float)b->y; w = (float)b->w; h = (float)b->h; col = b->team == 0 ? 0xbff5c4 : 0xff8e7e; }
+  else if (n) { x0 = (float)n->x; y0 = (float)n->y; w = h = 1; col = 0xfff3a0; }
+  else return;
+  float q[8] = { isoX(x0, y0), isoY(x0, y0), isoX(x0 + w, y0), isoY(x0 + w, y0), isoX(x0 + w, y0 + h), isoY(x0 + w, y0 + h), isoX(x0, y0 + h), isoY(x0, y0 + h) };
+  stroke_poly(q, 4, 2, col, 0.95f);
+}
+
 static void draw_unit(const FUnit *u, int selected) {
   float x = isoX(u->x, u->y), y = isoY(u->x, u->y);
   const UnitDef *d = &UDEF[u->type];
@@ -567,13 +584,14 @@ static void render_world(int mouseX, int mouseY, int dragging, float dragX, floa
     else draw_unit(get_unit(items[i].id), sel_has(items[i].id));
   }
 
+  if (hoverId && !sel_has(hoverId)) draw_hover(hoverId);
   for (int i = 0; i < nProjs; i++) draw_projectile(&mProjs[i]);
   for (int i = 0; i < nEffs; i++) draw_effect(&mEffs[i]);
 
   /* health bars */
   for (int i = 0; i < ni; i++) {
     if (items[i].kind == K_NODE) continue;
-    int isSel = sel_has(items[i].id);
+    int isSel = sel_has(items[i].id) || items[i].id == hoverId;   /* hovering shows the health bar too */
     if (items[i].kind == K_UNIT) {
       const FUnit *u = get_unit(items[i].id);
       if (!isSel && u->hp >= u->maxHp) continue;

@@ -120,6 +120,20 @@ int main(int argc, char **argv) {
     CHECK(pick_at(px, py) == id, "pick_at finds the tree under the cursor");
   }
 
+  /* ---- hover feedback ---- */
+  {
+    const FUnit *own = NULL; for (int i = 0; i < nUnits; i++) if (mUnits[i].team == 0) { own = &mUnits[i]; break; }
+    float hx, hy; w2s(own->x, own->y, &hx, &hy);
+    move_to(hx, hy - 11 * zoom); step(1);
+    CHECK(hoverId == own->id, "hovering a unit sets hoverId");
+    step(1); shot(shots, "hover");
+    move_to(hx, H - 5); step(1);
+    CHECK(hoverId == 0, "no hover over the HUD");
+    move_to(hx, hy - 11 * zoom); key(SDL_SCANCODE_F1, 0); step(1);
+    CHECK(hoverId == 0, "no hover while a panel is open");
+    key(SDL_SCANCODE_F1, 0); step(1);
+  }
+
   /* ---- control groups ---- */
   int nb = nSel;
   key(SDL_SCANCODE_1, KMOD_CTRL);
