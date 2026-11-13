@@ -89,7 +89,7 @@ static const TechDef TDEF[NUM_TECH] = {
 static const DiffDef DIFFD[3] = {
   /* easy */ { 0.8, 16, 10, 3, 1.4, 0, 1.0 },
   /* normal */ { 1.0, 24, 9, 4, 1.0, 100, 0.7 },
-  /* hard */ { 1.25, 32, 8, 5, 0.75, 300, 0.5 },
+  /* hard */ { 1.05, 28, 8, 5, 0.85, 150, 0.55 },
 };
 
 #endif

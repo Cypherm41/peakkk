@@ -79,6 +79,13 @@ build/sdl_smoke: tests/sdl_smoke.c $(SDL_SRC) c/defs.h build/game_native.o
 test-sdl: build/sdl_smoke
 	SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ./build/sdl_smoke
 
+# scripted-player balance sweep: a bot plays team 0 against the AI (see tests/bot_player.c); args: seeds minutes strat diff
+build/bot_player: tests/bot_player.c sdl/model.h sdl/sim.h c/defs.h build/game_native.o
+	$(CC_NATIVE) $(CFLAGS) -Wno-unused-variable -Isdl -Ic tests/bot_player.c build/game_native.o -o $@ -lm
+
+bot: build/bot_player
+	./build/bot_player $(BOT_ARGS)
+
 # random-input fuzz of the front end under ASan + UBSan (game.c is rebuilt with the sanitizers too)
 build/sdl_fuzz: tests/sdl_fuzz.c $(SDL_SRC) c/defs.h c/game.c
 	@mkdir -p build
@@ -90,4 +97,4 @@ fuzz-sdl: build/sdl_fuzz
 clean:
 	rm -rf build
 
-.PHONY: all wasm test sdl run-sdl test-sdl fuzz-sdl clean
+.PHONY: all wasm test sdl run-sdl test-sdl fuzz-sdl bot clean

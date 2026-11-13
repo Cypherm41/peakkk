@@ -138,7 +138,7 @@ const TECHS = {
 const DIFFS = {
   easy:   { gather: 0.8,  maxB: 16, wave: 10, grow: 3, pace: 1.4,  bonus: 0,   think: 1.0 },
   normal: { gather: 1.0,  maxB: 24, wave: 9,  grow: 4, pace: 1.0,  bonus: 100, think: 0.7 },
-  hard:   { gather: 1.25, maxB: 32, wave: 8,  grow: 5, pace: 0.75, bonus: 300, think: 0.5 },
+  hard:   { gather: 1.05, maxB: 28, wave: 8,  grow: 5, pace: 0.85, bonus: 150, think: 0.55 },
 };
 
 // Index orders shared with the C core (the order of the keys above).

@@ -50,6 +50,25 @@ The native tests include the real `c/game.c`, so they test exactly the code that
 
 To change a unit's stats or a building's cost, edit `js/defs.js` and run `make`.
 
+## Balance testing
+
+`tests/bot_player.c` is a scripted player (economy, production, upgrades, defence, attack waves) that plays team 0 against the AI headless, using only the public `g_*` API. It is there to measure difficulty instead of guessing at it:
+
+```
+make bot BOT_ARGS="30 45 both all"     # seeds, max minutes, strategy (boom|rush|both), difficulty (0|1|2|all)
+BOT_TRACE=1 ./build/bot_player 1 15 boom 1   # print the bot's economy every 20 s of game time
+```
+
+Win rates of the bot's sensible `boom` strategy over 30 maps (`rush` is a deliberate all-in at 12 soldiers):
+
+| AI difficulty | boom | rush |
+|---|---|---|
+| Easy | 87% | 87% |
+| Normal | 47% | 27% |
+| Hard | 17% | 27% |
+
+The bot is a mediocre player, so read these as a curve, not as what a person would score. Hard used to win against the bot 0 times in 30 (its +300 starting resources, x1.25 gathering and 33% faster build order were too much); it is now beatable but still clearly harder than Normal. If you retune `DIFFS` in `js/defs.js`, re-run the sweep: a first guess of "delay the AI's first attack" made Normal *harder* (the AI just built a bigger economy), which is why the numbers are worth checking.
+
 ## Native SDL2 front end
 
 The same C simulation also runs as a desktop game, with the browser UI replaced by an SDL2 one (`sdl/`). It links `c/game.c` as a separate object and talks to it through the same `g_*` functions the WebAssembly build exports (declared in `sdl/sim.h`), so both front ends play identically.
