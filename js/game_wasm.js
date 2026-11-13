@@ -45,6 +45,9 @@ class Game {
     const aiTeams = opts.aiTeams || [1];
     let mask = 0; for (const t of aiTeams) mask |= 1 << t;
     this.seed = seed; this.difficulty = DIFF_KEYS[diffIdx];
+    const mapIdx = Math.max(0, MAP_KEYS.indexOf(opts.map || 'lake'));
+    this.map = MAP_KEYS[mapIdx];
+    _X.g_set_map(mapIdx);
     _X.g_init(seed >>> 0, diffIdx, mask);
 
     this.units = []; this.buildings = []; this.nodes = []; this.projectiles = []; this.effects = []; this.events = [];

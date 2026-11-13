@@ -39,6 +39,7 @@ enum { PANEL_NONE = 0, PANEL_HELP, PANEL_END };
 static int screen = SCR_MENU, overlayPanel = PANEL_NONE;   /* overlayPanel: help / end-of-game panel over the play screen */
 static int inGame;                                  /* a game has been started */
 static int diffChoice = 1;
+static int mapChoice = 0;                          /* index into MAP_NAME / js MAP_KEYS */
 static const char *DIFF_NAME[3] = { "Easy", "Normal", "Hard" };
 
 #define MAXSEL 700

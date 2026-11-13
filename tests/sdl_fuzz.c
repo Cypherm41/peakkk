@@ -23,6 +23,7 @@ int main(int argc, char **argv) {
   rs = 88172645463325252ull ^ ((unsigned long long)(argc > 2 ? atoi(argv[2]) : 1) * 0x9E3779B97F4A7C15ull);
   SDL_setenv("SDL_VIDEODRIVER", "dummy", 0); SDL_setenv("SDL_AUDIODRIVER", "dummy", 0);
   if (!ui_init("sdl fuzz", 1280, 800, 1)) { printf("ui_init failed: %s\n", SDL_GetError()); return 1; }
+  mapChoice = (int)(rnd() % MAP_COUNT);
   ui_start_game((int)(rnd() % 3), 1234);
   int games = 1;
   for (int n = 0; n < events; n++) {
@@ -40,7 +41,7 @@ int main(int argc, char **argv) {
     SDL_SetModState(KMOD_NONE);
     ui_update(rf(0.001f, 0.12f) * (rnd() % 5 == 0 ? 8 : 1));
     if (n % 25 == 0) ui_draw();
-    if (screen == SCR_MENU && rnd() % 20 == 0) { ui_start_game((int)(rnd() % 3), (unsigned)rnd()); games++; }
+    if (screen == SCR_MENU && rnd() % 20 == 0) { mapChoice = (int)(rnd() % MAP_COUNT); ui_start_game((int)(rnd() % 3), (unsigned)rnd()); games++; }
     if (overlayPanel == PANEL_END) { overlayPanel = PANEL_NONE; if (rnd() & 1) screen = SCR_MENU; }   /* like clicking Play Again, or dismissing the panel */
     if (n % 3000 == 2999) screen = SCR_MENU;                                       /* regularly return to the menu so restarts are fuzzed too */
     /* invariants of the UI state */

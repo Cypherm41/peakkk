@@ -1,7 +1,7 @@
 /* A scripted "reasonable human" player for team 0, played against the built-in AI (team 1), headless.
  *
  *   make bot                          run the default sweep (3 difficulties x 6 seeds x 2 strategies)
- *   ./build/bot_player [seeds] [maxMinutes] [strategy: boom|rush|both] [difficulty 0|1|2|all]
+ *   ./build/bot_player [seeds] [maxMinutes] [strategy: boom|rush|both] [difficulty 0|1|2|all] [map 0-4]
  *
  * It exists to measure game balance rather than to be clever: if a sensible bot cannot beat Easy, or beats Hard
  * every time, the tuning is off. It only uses what a human has: the public g_* API and the snapshot model, no
@@ -12,6 +12,7 @@
 #include <math.h>
 #include <string.h>
 #include "model.h"
+static int botMap;                    /* terrain for every game: 0 lake, 1 plains, 2 river, 3 ponds, 4 forest */
 
 typedef struct { const char *name; int builders, attackAt, barracks, archery, stable, smith, towers; } Strat;
 static const Strat STRATS[2] = {
@@ -239,6 +240,7 @@ typedef struct { int winner; float time; int myArmy, enArmy, myBlds, enBlds, pea
 
 static Result play(int seed, int diff, const Strat *strat, float maxMinutes) {
   S = strat; attacking = 0; lastWaveOrder = -100;
+  g_set_map(botMap);
   g_init((unsigned)seed, diff, 1 << 1);
   model_sync();
   Result r = { -1, 0, 0, 0, 0, 0, 0 };
@@ -268,6 +270,7 @@ int main(int argc, char **argv) {
   float maxMin = argc > 2 ? (float)atof(argv[2]) : 25.0f;
   const char *which = argc > 3 ? argv[3] : "both";
   const char *dsel = argc > 4 ? argv[4] : "all";
+  botMap = argc > 5 ? atoi(argv[5]) : 0;
   if (!model_init()) { printf("snapshot layout mismatch\n"); return 2; }
   static const char *DN[3] = { "easy", "normal", "hard" };
   printf("%-6s %-5s %-5s %-8s %7s %9s %9s %9s\n", "diff", "strat", "seed", "result", "minutes", "peakArmy", "army/en", "blds/en");

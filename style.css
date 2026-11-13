@@ -80,10 +80,10 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
 .panel h2 { margin: 0 0 10px; color: #ffe39a; }
 .panel .sub { margin: 0 0 16px; color: #dfcfa3; font-size: 17px; }
 .panel b.g { color: #6fe07d; } .panel b.y { color: #f4d94f; }
-.row { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 10px 0 18px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; margin: 10px 0 18px; }
 .row span { margin-right: 6px; color: #cdbd93; }
-.diff { padding: 7px 18px; border: 1px solid #8a6a3a; border-radius: 4px; background: #3a2a18; color: #e8d8ae; font: inherit; cursor: pointer; }
-.diff.sel { background: #7a5a2b; border-color: #ffe08a; color: #fff; }
+.diff, .map { padding: 7px 14px; border: 1px solid #8a6a3a; border-radius: 4px; background: #3a2a18; color: #e8d8ae; font: inherit; cursor: pointer; }
+.diff.sel, .map.sel { background: #7a5a2b; border-color: #ffe08a; color: #fff; }
 button.big { padding: 11px 36px; font: inherit; font-size: 19px; font-weight: bold; color: #2a1a05; cursor: pointer;
   background: linear-gradient(#f3d27a, #c99a34); border: 2px solid #ffe9a8; border-radius: 6px; }
 button.big:hover { filter: brightness(1.1); }
@@ -98,3 +98,5 @@ button.big:hover { filter: brightness(1.1); }
   #cmds { grid-template-columns: repeat(4, 62px); }
   .res { min-width: 60px; padding: 3px 6px; font-size: 14px; }
 }
+#mapdesc { font-size: 14px; min-height: 2.6em; margin: -6px 0 14px; }
+.map { padding: 7px 9px; font-size: 14px; }

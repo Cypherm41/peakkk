@@ -40,6 +40,28 @@ static void test_map(void) {
   CHECK(!passLand(36, 36) && passWater(36, 36), "lake tile is water only");
 }
 
+static void test_maps(void) {
+  static const char *MN[5] = { "lake", "plains", "river", "ponds", "forest" };
+  for (int m = 0; m < 5; m++) for (int seed = 1; seed <= 25; seed++) {
+    g_set_map(m); g_init(seed * 7919, 1, 0);
+    int tree = 0, gold = 0, stone = 0, water = 0, nearTrees = 0;
+    for (int i = 0; i < MAXN; i++) if (nodes[i].id && !nodes[i].dead) {
+      if (nodes[i].type == N_TREE) { tree++; if (d_hypot(nodes[i].x - base_x[0], nodes[i].y - base_y[0]) < 16) nearTrees++; } else if (nodes[i].type == N_GOLD) gold++; else stone++;
+    }
+    for (int i = 0; i < MAP_W * MAP_H; i++) water += terrain[i] == T_WATER;
+    Goal g; g.mode = 0; g.gx = base_x[1] - 2; g.gy = base_y[1];
+    int ok = findPath(base_x[0] + 2, base_y[0], 0, &g, g.gx, g.gy, 30000);
+    char msg[160];
+    snprintf(msg, sizeof msg, "map %s seed %d: land route between bases", MN[m], seed); CHECK(ok, msg);
+    snprintf(msg, sizeof msg, "map %s seed %d: enough resources (t%d g%d s%d)", MN[m], seed, tree, gold, stone); CHECK(tree > 60 && gold >= 12 && stone >= 6 && nearTrees >= 25, msg);
+    snprintf(msg, sizeof msg, "map %s seed %d: water amount %d", MN[m], seed, water); CHECK((m == 1 || m == 4) ? water == 0 : water > 120, msg);
+    /* nothing may be spawned on water, and both starts must be free land */
+    for (int i = 0; i < MAXB; i++) if (blds[i].id) CHECK(terrain[blds[i].y * MAP_W + blds[i].x] != T_WATER, "town center on land");
+    if (seed == 1) printf("map %-6s: trees %d gold %d stone %d water %d\n", MN[m], tree, gold, stone, water);
+  }
+  g_set_map(0);
+}
+
 static void test_economy(void) {
   g_init(4242, 1, 0);
   Bld *tc = &blds[0];
@@ -140,6 +162,7 @@ int main(int argc, char **argv) {
   double minutes = argc > 1 ? atof(argv[1]) : 25;
   uint32_t seed = argc > 2 ? (uint32_t)atoi(argv[2]) : 12345;
   test_map();
+  test_maps();
   test_economy();
   test_combat();
   run_ai_vs_ai(minutes, seed, 1);

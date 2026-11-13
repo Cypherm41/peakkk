@@ -135,6 +135,9 @@ static int winner, difficulty;
 static uint8_t terrain[MAP_W * MAP_H], lake[MAP_W * MAP_H], shade[MAP_W * MAP_H];
 static int occ[MAP_W * MAP_H];       /* id of the building / node on a tile, 0 = free */
 static int base_x[2] = { 11, 60 }, base_y[2] = { 36, 36 };
+static int mapType;                  /* 0 lake, 1 plains, 2 river, 3 ponds, 4 forest; set by g_set_map before g_init */
+static float noiseF[MAP_W * MAP_H];  /* smooth 0..1 noise kept for the forest map */
+static double pond[8][3]; static int npond;
 
 static Unit *U(int id) {
   if (id <= 0 || id >= MAXID) return 0;
@@ -243,6 +246,17 @@ static void generateMap(void) {
   enum { NS = 12 };
   static double lat[(NS + 2) * (NS + 2)];
   for (int i = 0; i < (NS + 2) * (NS + 2); i++) lat[i] = rnd();
+  npond = 0;
+  if (mapType == 3) {
+    for (int t = 0; t < 200 && npond < 7; t++) {
+      double px = 6 + rnd() * (MAP_W - 12), py = 6 + rnd() * (MAP_H - 12), pr = 3 + rnd() * 2.5;
+      int ok = 1;
+      for (int b = 0; b < 2; b++) if (d_hypot(px - base_x[b], py - base_y[b]) < pr + 13) ok = 0;
+      for (int k = 0; k < npond; k++) if (d_hypot(px - pond[k][0], py - pond[k][1]) < pr + pond[k][2] + 6) ok = 0;
+      if (!ok) continue;
+      pond[npond][0] = px; pond[npond][1] = py; pond[npond][2] = pr; npond++;
+    }
+  }
   for (int y = 0; y < MAP_H; y++) for (int x = 0; x < MAP_W; x++) {
     double u = x / (double)(MAP_W + 1), v = y / (double)(MAP_H + 1);
     double gx = u * NS, gy = v * NS; int ix = fl(gx), iy = fl(gy);
@@ -251,7 +265,17 @@ static void generateMap(void) {
     double nz = (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy;
     double wob = (nz - 0.5) * 0.4;
     double dd = d_hypot((x - 36) / 12.0, (y - 36) / 20.0);
-    terrain[y * MAP_W + x] = dd < 1 + wob ? T_WATER : T_GRASS;
+    int water = 0;
+    if (mapType == 0) water = dd < 1 + wob;
+    else if (mapType == 2) {              /* river running north-south with three fords */
+      double cx = 36 + 7 * d_sin(y * 0.14 + nz * 2.0) + wob * 10;
+      water = d_abs(x - cx) < 1.7 + nz * 1.2;
+      if (d_abs(y - 36) < 3.2 || d_abs(y - 12) < 2.6 || d_abs(y - 60) < 2.6) water = 0;
+    } else if (mapType == 3) {
+      for (int k = 0; k < npond; k++) if (d_hypot((x - pond[k][0]) / pond[k][2], (y - pond[k][1]) / (pond[k][2] * 0.75)) < 1 + wob * 1.3) water = 1;
+    }
+    terrain[y * MAP_W + x] = water ? T_WATER : T_GRASS;
+    noiseF[y * MAP_W + x] = (float)nz;
     shade[y * MAP_W + x] = (uint8_t)(int)(rnd() * 6);
   }
   for (int y = 0; y < MAP_H; y++) for (int x = 0; x < MAP_W; x++) {
@@ -263,6 +287,9 @@ static void generateMap(void) {
     }
     if (near) terrain[y * MAP_W + x] = T_SAND;
   }
+  if (mapType != 0) {                    /* every body of water counts as a harbour */
+    for (int i = 0; i < MAP_W * MAP_H; i++) lake[i] = terrain[i] == T_WATER;
+  } else {
   /* flood-fill the central lake */
   static int stack[MAP_W * MAP_H * 2]; int sp = 0;
   if (terrain[36 * MAP_W + 36] == T_WATER) stack[sp++] = 36 * MAP_W + 36;
@@ -277,6 +304,7 @@ static void generateMap(void) {
       if (nx >= 0 && ny >= 0 && nx < MAP_W && ny < MAP_H && terrain[ny * MAP_W + nx] == T_WATER && !lake[ny * MAP_W + nx] && sp < MAP_W * MAP_H * 2 - 1) stack[sp++] = ny * MAP_W + nx;
     }
   }
+  }
   /* base resources, mirrored for the second team */
   for (int i = 0; i < 2; i++) {
     int s = i == 0 ? 1 : -1, bx = base_x[i], by = base_y[i];
@@ -286,9 +314,42 @@ static void generateMap(void) {
     cluster(N_GOLD, bx + 3 * s, by - 8, 5, 1.8);
     cluster(N_STONE, bx + 3 * s, by + 8, 4, 1.7);
   }
+  if (mapType == 0) {
   cluster(N_GOLD, 36, 8, 6, 2.2); cluster(N_GOLD, 36, 64, 6, 2.2);
   cluster(N_STONE, 30, 12, 4, 1.8); cluster(N_STONE, 42, 60, 4, 1.8);
   cluster(N_GOLD, 24, 10, 4, 1.8); cluster(N_GOLD, 48, 62, 4, 1.8);
+  } else {
+    /* contested mid-map deposits, mirrored top/bottom so neither side is favoured */
+    cluster(N_GOLD, 36, 22, 6, 2.2); cluster(N_GOLD, 36, 50, 6, 2.2);
+    cluster(N_STONE, 28, 24, 4, 1.8); cluster(N_STONE, 44, 48, 4, 1.8);
+    cluster(N_GOLD, 22, 12, 4, 1.8); cluster(N_GOLD, 50, 60, 4, 1.8);
+    cluster(N_STONE, 36, 36, 3, 1.5);
+  }
+  if (mapType == 4) {
+    /* forest density is normalised so every seed gets about the same number of trees (well under the node cap) */
+    int q = 0;
+    for (int y = 0; y < MAP_H; y++) for (int x = 0; x < MAP_W; x++)
+      if (noiseF[y * MAP_W + x] >= 0.55f && isFreeLand(x, y) && !nearBase(x, y, 11) && !(d_abs(y - 36) < 3 && x > 20 && x < 52)) q++;
+    double keep = q > 0 ? 950.0 / q : 0;
+    if (keep > 0.85) keep = 0.85;
+    for (int y = 0; y < MAP_H; y++) for (int x = 0; x < MAP_W; x++) {
+      if (noiseF[y * MAP_W + x] < 0.55f || !isFreeLand(x, y) || nearBase(x, y, 11)) continue;
+      if (d_abs(y - 36) < 3 && x > 20 && x < 52) continue;      /* keep a road between the bases */
+      if (rnd() < keep) addNode(N_TREE, x, y);
+    }
+  }
+  if (mapType == 1) {                    /* plains: a few lone groves instead of the usual forests */
+    for (int n = 0, tries = 0; n < 12 && tries < 300; tries++) {
+      double cx = 4 + rnd() * (MAP_W - 8), cy = 4 + rnd() * (MAP_H - 8);
+      if (!isFreeLand(fl(cx), fl(cy))) continue;
+      if (d_hypot(cx - base_x[0], cy - base_y[0]) < 12 || d_hypot(cx - base_x[1], cy - base_y[1]) < 12) continue;
+      int count = 8 + (int)(rnd() * 10);
+      cluster(N_TREE, cx, cy, count, 2.5);
+      n++;
+    }
+    return;
+  }
+  if (mapType == 4) return;
   for (int n = 0, tries = 0; n < 30 && tries < 400; tries++) {
     double cx = 2 + rnd() * (MAP_W - 4), cy = 2 + rnd() * (MAP_H - 4);
     if (!isFreeLand(fl(cx), fl(cy))) continue;
@@ -1565,6 +1626,8 @@ EXPORT("g_update") void g_update(double dt) {
   }
 }
 
+/* Selects the terrain for the next g_init: 0 central lake (default), 1 open plains, 2 river with fords, 3 ponds, 4 deep forest. */
+EXPORT("g_set_map") void g_set_map(int m) { mapType = clampi(m, 0, 4); }
 EXPORT("g_init") void g_init(uint32_t seed, int diff, int aiMask) {
   __builtin_memset(units, 0, sizeof(units)); __builtin_memset(blds, 0, sizeof(blds)); __builtin_memset(nodes, 0, sizeof(nodes));
   __builtin_memset(idmap, 0, sizeof(idmap)); __builtin_memset(occ, 0, sizeof(occ)); __builtin_memset(lake, 0, sizeof(lake));

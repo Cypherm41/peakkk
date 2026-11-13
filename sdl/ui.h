@@ -497,6 +497,7 @@ static void process_events(void) {
 /* ------------------------------ starting a game ------------------------------ */
 
 static void ui_start_game(int diff, unsigned seed) {
+  g_set_map(mapChoice);
   g_init(seed, diff, 1 << 1);
   model_bind_terrain();
   nSel = 0; nEvQueue = 0; placingOn = 0; cmdAttackMove = 0; paused = 0; speedMul = 1; zoom = 1;
@@ -873,9 +874,10 @@ static void draw_hud(void) {
 
 /* ------------------------------ overlays: menu, help, end screen ------------------------------ */
 
-static Rc menu_rc(void) { float w = fminf(640, W - 32), h = 590; Rc r = { (W - w) / 2, (H - h) / 2, w, h }; return r; }
-static Rc menu_diff_rc(int i) { Rc p = menu_rc(); float x0 = p.x + (p.w - (3 * 104 - 8)) / 2; Rc r = { x0 + i * 104, p.y + 150, 96, 34 }; return r; }
-static Rc menu_start_rc(void) { Rc p = menu_rc(); Rc r = { p.x + (p.w - 240) / 2, p.y + 204, 240, 50 }; return r; }
+static Rc menu_rc(void) { float w = fminf(640, W - 32), h = 740; Rc r = { (W - w) / 2, (H - h) / 2, w, h }; return r; }
+static Rc menu_diff_rc(int i) { Rc p = menu_rc(); float x0 = p.x + (p.w - (3 * 204 - 8)) / 2; Rc r = { x0 + i * 104, p.y + 150, 96, 34 }; return r; }
+static Rc menu_map_rc(int i) { Rc p = menu_rc(); float x0 = p.x + (p.w - (3 * 204 - 8)) / 2; Rc r = { x0 + (i % 3) * 204, p.y + 218 + (i / 3) * 40, 196, 32 }; return r; }
+static Rc menu_start_rc(void) { Rc p = menu_rc(); Rc r = { p.x + (p.w - 240) / 2, p.y + 356, 240, 50 }; return r; }
 
 static const char *HELP_ROWS[][2] = {
   { "Left click / drag", "Select units or buildings (double click: all of a type on screen)" },
@@ -928,8 +930,11 @@ static void draw_menu(void) {
   draw_panel_frame(p);
   draw_title(p.x + p.w / 2, p.y + 26, 4, 0xffe39a, "Banners of Peakkk");
   text_wrap(p.x + 30, p.y + 78, p.w - 60, 2, 0xdfcfa3, 1, "A medieval real-time strategy game. Lead the Green kingdom against the Yellow realm.", 1);
-  text(menu_diff_rc(0).x - 0, p.y + 124, 2, 0xcdbd93, 1, "Difficulty");
+  text(menu_map_rc(0).x, p.y + 124, 2, 0xcdbd93, 1, "Difficulty");
   for (int i = 0; i < 3; i++) { Rc r = menu_diff_rc(i); ui_button(r, DIFF_NAME[i], 2, diffChoice == i, in_rc(r, mouse.x, mouse.y)); }
+  text(menu_map_rc(0).x, p.y + 194, 2, 0xcdbd93, 1, "Map");
+  for (int i = 0; i < MAP_COUNT; i++) { Rc r = menu_map_rc(i); ui_button(r, MAP_NAME[i], 2, mapChoice == i, in_rc(r, mouse.x, mouse.y)); }
+  text_wrap(menu_map_rc(0).x, p.y + 304, p.w - 2 * (menu_map_rc(0).x - p.x), 2, 0xdfcfa3, 1, MAP_DESC[mapChoice], 1);
   Rc s = menu_start_rc(); big_button(s, "Start Game", in_rc(s, mouse.x, mouse.y));
   static const char *tips[4] = {
     "Train builders at the Town Center and put them to work: chop trees, build farms, mine gold and stone.",
@@ -937,10 +942,12 @@ static void draw_menu(void) {
     "Raise an army from the Barracks, Archery Range and Stable. Swordsmen beat spearmen, spearmen beat cavalry, cavalry beat archers, archers beat swordsmen.",
     "Destroy every Yellow building to win. Press F1 in game for all controls.",
   };
-  float y = p.y + 276;
+  float y = p.y + 428;
   for (int i = 0; i < 4; i++) {
+    int n = text_wrap(0, 0, p.w - 80, 2, 0, 1, tips[i], 0);
+    if (y + n * 20 > p.y + p.h - 34) break;                       /* never spill over the footer in a short window */
     fill_ellipse(p.x + 36, y + 7, 3, 3, 0xcdbd93, 1);
-    int n = text_wrap(p.x + 50, y, p.w - 80, 2, 0xcdbd93, 1, tips[i], 1);
+    text_wrap(p.x + 50, y, p.w - 80, 2, 0xcdbd93, 1, tips[i], 1);
     y += n * 20 + 8;
   }
   text_center(p.x + p.w / 2, p.y + p.h - 22, 1, 0x8f7f5a, 1, "Enter: start   F1: controls (in game)   F11: fullscreen");
@@ -1006,6 +1013,7 @@ static void ui_draw(void) {
 static void overlay_click(float x, float y) {
   if (screen == SCR_MENU) {
     for (int i = 0; i < 3; i++) if (in_rc(menu_diff_rc(i), x, y)) { diffChoice = i; return; }
+    for (int i = 0; i < MAP_COUNT; i++) if (in_rc(menu_map_rc(i), x, y)) { mapChoice = i; return; }
     if (in_rc(menu_start_rc(), x, y)) ui_start_game(diffChoice, (unsigned)time(NULL) ^ (SDL_GetTicks() * 2654435761u));
   } else if (overlayPanel == PANEL_HELP) {
     if (in_rc(help_close_rc(), x, y)) overlayPanel = PANEL_NONE;

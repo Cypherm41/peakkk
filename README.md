@@ -16,6 +16,7 @@ Press **F1** in game for the full controls.
 - **Units:** Builder, Swordsman, Spearman, Archer, Cavalry and Warship (built at the Port, fights on the central lake).
 - **Counters:** swordsmen beat spearmen, spearmen beat cavalry, cavalry beat archers, archers beat swordsmen.
 - **Upgrades:** the Blacksmith researches weapon and armor levels.
+- **Maps:** pick one in the main menu (web and SDL). *Central Lake* is the classic; *Open Plains* has no water and few trees; *Twin Fords* is a winding river with three crossings; *Pond Country* scatters small ponds (Ports work on any water); *Deep Forest* fills the map with woods and leaves a road between the bases. Each seed generates a different layout, and every map is checked for a land route between the bases and for enough resources.
 - **Enemy AI:** three difficulties (Easy, Normal, Hard). It builds an economy, expands its base, researches upgrades and sends growing attack waves.
 
 ## How it's built
@@ -55,7 +56,7 @@ To change a unit's stats or a building's cost, edit `js/defs.js` and run `make`.
 `tests/bot_player.c` is a scripted player (economy, production, upgrades, defence, attack waves) that plays team 0 against the AI headless, using only the public `g_*` API. It is there to measure difficulty instead of guessing at it:
 
 ```
-make bot BOT_ARGS="30 45 both all"     # seeds, max minutes, strategy (boom|rush|both), difficulty (0|1|2|all)
+make bot BOT_ARGS="30 45 both all"     # seeds, max minutes, strategy (boom|rush|both), difficulty (0|1|2|all), map (0 lake, 1 plains, 2 river, 3 ponds, 4 forest)
 BOT_TRACE=1 ./build/bot_player 1 15 boom 1   # print the bot's economy every 20 s of game time
 ```
 
@@ -80,9 +81,9 @@ make sdl            # build build/peakkk_sdl
 make run-sdl        # build and start it
 make test-sdl       # headless smoke test: injects mouse / keyboard events into the real UI (no display needed)
 make fuzz-sdl       # random-input fuzz of the UI under ASan + UBSan (./build/sdl_fuzz [events] [seed])
-./build/peakkk_sdl --start --difficulty hard --seed 7
+./build/peakkk_sdl --start --difficulty hard --map river --seed 7
 ```
 
 Controls are the same as in the browser (press **F1**), except that the HUD uses a built-in ASCII bitmap font, so units, buildings and commands are labelled with letters and short names instead of emoji. Sound uses the same tiny synth as the web version; if no audio device can be opened the game just runs silent. `--frames N --shot out.bmp` runs N frames at a fixed timestep and saves a screenshot, which is handy for CI.
 
-`sdl/gamedata.h` (names, descriptions, team colours) is generated from `js/defs.js` by `tools/gen_sdl_data.js`; `make` keeps it up to date.
+The core picks the terrain with `g_set_map(n)` before `g_init` (default 0, the classic lake). Map names live in `js/defs.js` (`MAPS`). `sdl/gamedata.h` (names, descriptions, team colours, map names) is generated from `js/defs.js` by `tools/gen_sdl_data.js`; `make` keeps it up to date.

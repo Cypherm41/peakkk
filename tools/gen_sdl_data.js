@@ -28,6 +28,9 @@ arr('BLD_DESC', D.BUILDING_KEYS, (k) => D.BUILDING_DEFS[k].desc);
 arr('TECH_NAME', D.TECH_KEYS, (k) => D.TECHS[k].name);
 arr('TECH_DESC', D.TECH_KEYS, (k) => D.TECHS[k].desc);
 arr('NODE_NAME', D.NODE_KEYS, (k) => D.NODE_DEFS[k].name);
+arr('MAP_NAME', D.MAP_KEYS, (k) => D.MAPS[k].name);
+arr('MAP_DESC', D.MAP_KEYS, (k) => D.MAPS[k].desc);
+o += `#define MAP_COUNT ${D.MAP_KEYS.length}\n`;
 
 o += `\nstatic const float BLD_HEIGHT[${D.BUILDING_KEYS.length}] = { ${D.BUILDING_KEYS.map((k) => (D.BUILDING_DEFS[k].height || 20) + '.0f').join(', ')} };\n`;
 o += `\nstatic const char *TEAM_NAME[${D.TEAMS.length}] = { ${D.TEAMS.map((t) => q(t.name)).join(', ')} };\n`;

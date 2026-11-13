@@ -59,9 +59,22 @@ int main(int argc, char **argv) {
   click(SDL_BUTTON_LEFT, hard.x + 5, hard.y + 5, 0);
   CHECK(diffChoice == 2, "clicking Hard selects it");
   click(SDL_BUTTON_LEFT, menu_diff_rc(1).x + 5, menu_diff_rc(1).y + 5, 0);
+  CHECK(mapChoice == 0, "the Central Lake map is selected by default");
+  for (int m = 0; m < MAP_COUNT; m++) {
+    Rc r = menu_map_rc(m);
+    click(SDL_BUTTON_LEFT, r.x + 5, r.y + 5, 0);
+    CHECK(mapChoice == m, "clicking a map button selects it");
+  }
+  /* the menu shows every map and each map generates real terrain */
+  for (int m = 0; m < MAP_COUNT; m++) {
+    mapChoice = m; step(2);
+    char name[80]; snprintf(name, sizeof name, "menu_map%d", m); shot(shots, name);
+  }
+  click(SDL_BUTTON_LEFT, menu_map_rc(2).x + 5, menu_map_rc(2).y + 5, 0);   /* start the real game on the river map */
   Rc st = menu_start_rc();
   click(SDL_BUTTON_LEFT, st.x + 10, st.y + 10, 0);
   CHECK(screen == SCR_PLAY && inGame, "Start Game begins a game");
+  { int water = 0; for (int i = 0; i < MAP_W * MAP_H; i++) water += mTerrain[i] == TILE_WATER; CHECK(water > 120 && water < 800, "the river map has water"); }
   step(3);
 
   /* ---- start state ---- */

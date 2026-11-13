@@ -147,6 +147,15 @@ const BUILDING_KEYS = Object.keys(BUILDING_DEFS);
 const NODE_KEYS = Object.keys(NODE_DEFS);
 const TECH_KEYS = Object.keys(TECHS);
 const DIFF_KEYS = Object.keys(DIFFS);
+/* Selectable maps. The order is the index passed to g_set_map in the C core. */
+const MAPS = {
+  lake:   { name: 'Central Lake',  desc: 'Classic. A big lake splits the middle; build Ports and fight on the water.' },
+  plains: { name: 'Open Plains',   desc: 'No water, wide open ground and sparse groves. Wood is scarce, armies move fast.' },
+  river:  { name: 'Twin Fords',    desc: 'A winding river with three fords. Hold the crossings or sail the river.' },
+  ponds:  { name: 'Pond Country',  desc: 'Scattered ponds break up the land. Lots of room to expand, lots of detours.' },
+  forest: { name: 'Deep Forest',   desc: 'Thick woods fill the map. Lumber is plentiful; only a narrow road links the bases.' },
+};
+const MAP_KEYS = Object.keys(MAPS);
 
 /* -------------------------------- Helpers -------------------------------- */
 
@@ -165,7 +174,7 @@ const centerOf = (e) => (e.kind === 'unit' ? { x: e.x, y: e.y } : { x: e.x + e.w
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     MAP_W, MAP_H, TILE_W, TILE_H, MAX_POP, T_GRASS, T_WATER, T_SAND, FARM_RATE, FARM_SLOTS, TEAMS, RES_ICON, RES_LIST,
-    ATK_TYPES, CLASSES, NODE_DEFS, UNIT_DEFS, BUILDING_DEFS, TECHS, DIFFS, UNIT_KEYS, BUILDING_KEYS, NODE_KEYS, TECH_KEYS, DIFF_KEYS,
+    ATK_TYPES, CLASSES, NODE_DEFS, UNIT_DEFS, BUILDING_DEFS, TECHS, DIFFS, MAPS, MAP_KEYS, UNIT_KEYS, BUILDING_KEYS, NODE_KEYS, TECH_KEYS, DIFF_KEYS,
     clamp, dist, canAfford, missingRes, centerOf,
   };
 }

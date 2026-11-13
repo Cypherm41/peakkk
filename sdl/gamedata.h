@@ -55,6 +55,21 @@ static const char *NODE_NAME[3] = {
   /* gold */ "Gold Mine",
   /* stone */ "Stone Quarry",
 };
+static const char *MAP_NAME[5] = {
+  /* lake */ "Central Lake",
+  /* plains */ "Open Plains",
+  /* river */ "Twin Fords",
+  /* ponds */ "Pond Country",
+  /* forest */ "Deep Forest",
+};
+static const char *MAP_DESC[5] = {
+  /* lake */ "Classic. A big lake splits the middle; build Ports and fight on the water.",
+  /* plains */ "No water, wide open ground and sparse groves. Wood is scarce, armies move fast.",
+  /* river */ "A winding river with three fords. Hold the crossings or sail the river.",
+  /* ponds */ "Scattered ponds break up the land. Lots of room to expand, lots of detours.",
+  /* forest */ "Thick woods fill the map. Lumber is plentiful; only a narrow road links the bases.",
+};
+#define MAP_COUNT 5
 
 static const float BLD_HEIGHT[10] = { 44.0f, 20.0f, 2.0f, 18.0f, 28.0f, 26.0f, 26.0f, 26.0f, 24.0f, 54.0f };
 

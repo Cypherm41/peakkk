@@ -4,6 +4,7 @@
  *
  * Options:
  *   --difficulty easy|normal|hard   difficulty of the Yellow AI (default normal)
+ *   --map lake|plains|river|ponds|forest   terrain (default lake)
  *   --seed N                        map seed (default: random)
  *   --start                         skip the menu and start a game right away
  *   --size WxH                      initial window size (default 1280x800)
@@ -14,7 +15,7 @@
 #include "ui.h"
 
 static void usage(const char *argv0) {
-  printf("usage: %s [--difficulty easy|normal|hard] [--seed N] [--start] [--size WxH] [--frames N] [--shot FILE.bmp]\n", argv0);
+  printf("usage: %s [--difficulty easy|normal|hard] [--map lake|plains|river|ponds|forest] [--seed N] [--start] [--size WxH] [--frames N] [--shot FILE.bmp]\n", argv0);
 }
 
 int main(int argc, char **argv) {
@@ -29,6 +30,13 @@ int main(int argc, char **argv) {
       const char *d = argv[++i];
       diff = !strcmp(d, "easy") ? 0 : !strcmp(d, "hard") ? 2 : 1;
       if (strcmp(d, "easy") && strcmp(d, "normal") && strcmp(d, "hard")) { fprintf(stderr, "unknown difficulty '%s'\n", d); return 2; }
+    }
+    else if (!strcmp(a, "--map") && i + 1 < argc) {
+      static const char *keys[MAP_COUNT] = { "lake", "plains", "river", "ponds", "forest" };
+      const char *m = argv[++i]; int found = -1;
+      for (int k = 0; k < MAP_COUNT; k++) if (!strcmp(m, keys[k])) found = k;
+      if (found < 0) { fprintf(stderr, "unknown map '%s'\n", m); return 2; }
+      mapChoice = found;
     }
     else if (!strcmp(a, "--seed") && i + 1 < argc) { seed = (unsigned)strtoul(argv[++i], NULL, 10); haveSeed = 1; }
     else if (!strcmp(a, "--size") && i + 1 < argc) { if (sscanf(argv[++i], "%dx%d", &winW, &winH) != 2) { usage(argv[0]); return 2; } }

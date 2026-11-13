@@ -10,6 +10,7 @@
 #include <stdint.h>
 
 void g_init(uint32_t seed, int diff, int aiMask);   /* diff 0..2, aiMask bit i = team i is AI controlled */
+void g_set_map(int m);   /* 0 lake, 1 plains, 2 river, 3 ponds, 4 forest - applies to the next g_init */
 void g_update(double dt);
 
 /* orders operate on the unit ids previously written into g_idbuf() */

@@ -23,6 +23,7 @@ let placing = null;       // { type, x, y, valid }
 let cmdMode = null;       // 'attackmove'
 let paused = false, speed = 1, lastT = 0, hudTimer = 0, idleIdx = 0;
 let diffChoice = 'normal';
+let mapChoice = 'lake';
 let curCmds = new Array(12).fill(null);
 let cmdSig = '';
 let miniTerrain = null;
@@ -1114,6 +1115,13 @@ for (const b of document.querySelectorAll('.diff')) b.addEventListener('click', 
   diffChoice = b.dataset.d;
   for (const o of document.querySelectorAll('.diff')) o.classList.toggle('sel', o === b);
 });
+function setMapChoice(k) {
+  mapChoice = k;
+  for (const o of document.querySelectorAll('.map')) o.classList.toggle('sel', o.dataset.m === k);
+  $('mapdesc').textContent = MAPS[k].desc;
+}
+for (const b of document.querySelectorAll('.map')) b.addEventListener('click', () => setMapChoice(b.dataset.m));
+setMapChoice(mapChoice);
 $('btn-start').addEventListener('click', () => startGame(diffChoice));
 $('btn-again').addEventListener('click', () => showPanel('menu'));
 
@@ -1131,7 +1139,7 @@ function cameraTick(dt) {
 
 let endShown = false;   // the end panel opens once per game, so 'Play Again' can reach the menu
 function startGame(diff) {
-  game = new Game({ difficulty: diff });
+  game = new Game({ difficulty: diff, map: mapChoice });
   endShown = false;
   sel = []; placing = null; cmdMode = null; paused = false; speed = 1; zoom = 1; cmdSig = '';
   pings.length = 0; clickFx.length = 0; for (const k in groups) delete groups[k];
