@@ -23,7 +23,8 @@ let placing = null;       // { type, x, y, valid }
 let cmdMode = null;       // 'attackmove'
 let paused = false, speed = 1, lastT = 0, hudTimer = 0, idleIdx = 0;
 let diffChoice = 'normal';
-let mapChoice = 'lake';
+try { const v = JSON.parse(localStorage.getItem('peakkk.menu') || '{}'); if (DIFFS[v.d]) diffChoice = v.d; if (MAPS[v.m]) var savedMap = v.m; } catch (e) {}
+let mapChoice = (typeof savedMap === 'string') ? savedMap : 'lake';
 let curCmds = new Array(12).fill(null);
 let cmdSig = '';
 let miniTerrain = null;
@@ -1115,6 +1116,7 @@ for (const b of document.querySelectorAll('.diff')) b.addEventListener('click', 
   diffChoice = b.dataset.d;
   for (const o of document.querySelectorAll('.diff')) o.classList.toggle('sel', o === b);
 });
+for (const o of document.querySelectorAll('.diff')) o.classList.toggle('sel', o.dataset.d === diffChoice);
 function setMapChoice(k) {
   mapChoice = k;
   for (const o of document.querySelectorAll('.map')) o.classList.toggle('sel', o.dataset.m === k);
@@ -1122,7 +1124,10 @@ function setMapChoice(k) {
 }
 for (const b of document.querySelectorAll('.map')) b.addEventListener('click', () => setMapChoice(b.dataset.m));
 setMapChoice(mapChoice);
-$('btn-start').addEventListener('click', () => startGame(diffChoice));
+$('btn-start').addEventListener('click', () => {
+  try { localStorage.setItem('peakkk.menu', JSON.stringify({ d: diffChoice, m: mapChoice })); } catch (e) {}
+  startGame(diffChoice);
+});
 $('btn-again').addEventListener('click', () => showPanel('menu'));
 
 function cameraTick(dt) {
@@ -1152,7 +1157,7 @@ function startGame(diff) {
   hideOverlay();
   toast('Train builders at your Town Center, then put them to work!');
   const dn = { easy: 'Easy', normal: 'Normal', hard: 'Hard' }[diff];
-  setTimeout(() => { if (game) toast('Enemy difficulty: ' + dn); }, 1200);
+  setTimeout(() => { if (game) toast('Enemy difficulty: ' + dn + ' \u00b7 Map: ' + MAPS[game.map].name); }, 1200);
 }
 
 function frame(ts) {

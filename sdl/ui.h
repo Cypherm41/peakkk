@@ -549,7 +549,7 @@ static void ui_update(float dt) {
   for (int i = nPings - 1; i >= 0; i--) { pings[i].t += dt; if (pings[i].t > 1.5f) { memmove(pings + i, pings + i + 1, (size_t)(nPings - i - 1) * sizeof(Fx)); nPings--; } }
   if (placingOn) update_placing();
   hoverId = (mouse.seen && !overlay_open() && !placingOn && !mouse.drag && !mouse.mid && in_world(mouse.y)) ? pick_at(mouse.x, mouse.y) : 0;
-  if (diffToastTimer > 0 && (diffToastTimer -= dt) <= 0) toast(0, "Enemy difficulty: %s", DIFF_NAME[diffChoice]);
+  if (diffToastTimer > 0 && (diffToastTimer -= dt) <= 0) toast(0, "Enemy difficulty: %s - Map: %s", DIFF_NAME[diffChoice], MAP_NAME[mapChoice]);
   check_end();
   get_commands();
 }
