@@ -78,7 +78,43 @@ function sfx(kind) {
       case 'build': tone(520, 0.12, 'triangle', 0.06); tone(660, 0.12, 'triangle', 0.06, 0.1); tone(780, 0.2, 'triangle', 0.06, 0.2); break;
       case 'alert': tone(330, 0.2, 'sawtooth', 0.06); tone(250, 0.3, 'sawtooth', 0.06, 0.2); break;
       case 'place': tone(240, 0.1, 'square', 0.05); break;
+      case 'hit': tone(140, 0.07, 'square', 0.05); tone(95, 0.09, 'sawtooth', 0.04, 0.01); break;
+      case 'arrow': tone(1300, 0.05, 'triangle', 0.025); tone(900, 0.07, 'triangle', 0.02, 0.04); break;
+      case 'die': tone(300, 0.12, 'sawtooth', 0.04); tone(180, 0.25, 'sawtooth', 0.04, 0.1); break;
+      case 'win': [523, 659, 784, 1047].forEach((f, i) => tone(f, i === 3 ? 0.6 : 0.2, 'triangle', 0.07, i * 0.15)); break;
+      case 'lose': [330, 262, 220, 165].forEach((f, i) => tone(f, i === 3 ? 0.8 : 0.3, 'sawtooth', 0.05, i * 0.25)); break;
     }
+  } catch (e) { /* audio is optional */ }
+}
+
+/* Combat sounds are worked out from how the snapshot changes between frames, so the simulation needs no audio hooks. */
+const snd = { n: -1, hp: 0, proj: 0, hit: 0, arrow: 0, die: 0, music: 0, step: 0, seed: 7 };
+let musicOn = true;
+function soundReset() { snd.n = -1; snd.music = 1; snd.step = 0; }
+function combatSound(dt) {
+  snd.hit -= dt; snd.arrow -= dt; snd.die -= dt;
+  let hp = 0;
+  for (const u of game.units) hp += u.hp;
+  for (const b of game.buildings) if (b.done) hp += b.hp;
+  const n = game.units.length, np = game.projectiles.length;
+  if (snd.n >= 0) {
+    if (n < snd.n && snd.die <= 0) { sfx('die'); snd.die = 0.25; }
+    if (np > snd.proj && snd.arrow <= 0) { sfx('arrow'); snd.arrow = 0.15; }
+    if (hp < snd.hp - 0.5 && snd.hit <= 0) { sfx('hit'); snd.hit = 0.12; }
+  }
+  snd.n = n; snd.hp = hp; snd.proj = np;
+}
+/* A slow generative pad: notes of an A-minor pentatonic scale drift over a low drone. Quiet on purpose. */
+const SCALE = [220, 261.63, 293.66, 329.63, 392, 440, 523.25];
+function musicTick(dt) {
+  if (muted || !musicOn || !actx || actx.state !== 'running') return;
+  snd.music -= dt;
+  if (snd.music > 0) return;
+  snd.music = 1.3; snd.step++;
+  snd.seed = (snd.seed * 1103515245 + 12345) & 0x7fffffff;
+  try {
+    tone(SCALE[(snd.seed >> 8) % SCALE.length], 2.6, 'triangle', 0.016);
+    if (snd.step % 4 === 1) tone(snd.step % 8 === 1 ? 110 : 82.41, 5.2, 'sine', 0.03);
   } catch (e) { /* audio is optional */ }
 }
 
@@ -1098,6 +1134,7 @@ window.addEventListener('keydown', (e) => {
     case 'Space': e.preventDefault(); centerSelection(); return;
     case 'Period': cycleIdle(); return;
     case 'KeyM': muted = !muted; toast(muted ? 'Sound off' : 'Sound on'); return;
+    case 'KeyN': musicOn = !musicOn; toast(musicOn ? 'Music on' : 'Music off'); return;
   }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   const idx = HOTKEYS.indexOf(e.code.replace('Key', ''));
@@ -1146,6 +1183,7 @@ let endShown = false;   // the end panel opens once per game, so 'Play Again' ca
 function startGame(diff) {
   game = new Game({ difficulty: diff, map: mapChoice });
   endShown = false;
+  soundReset(); sfx('select');   // also unlocks WebAudio, which needs a user gesture
   sel = []; placing = null; cmdMode = null; paused = false; speed = 1; zoom = 1; cmdSig = '';
   pings.length = 0; clickFx.length = 0; for (const k in groups) delete groups[k];
   $('btn-pause').textContent = '⏸'; $('btn-speed').textContent = '⏩ 1x';
@@ -1171,6 +1209,7 @@ function frame(ts) {
     game.sync();   // pull the C simulation's state into JS objects once per frame
     cameraTick(dtReal);
     processEvents();
+    if (!paused && !overlayOpen()) { combatSound(dtReal * speed); musicTick(dtReal); }
     for (let i = clickFx.length - 1; i >= 0; i--) { clickFx[i].t += dtReal; if (clickFx[i].t > 0.7) clickFx.splice(i, 1); }
     for (let i = pings.length - 1; i >= 0; i--) { pings[i].t += dtReal; if (pings[i].t > 1.5) pings.splice(i, 1); }
     if (placing) updatePlacing();
@@ -1179,6 +1218,7 @@ function frame(ts) {
     if (game.winner !== null && !endShown) {
       endShown = true;
       const won = game.winner === 0;
+      sfx(won ? 'win' : 'lose');
       $('endtitle').textContent = won ? 'Victory!' : 'Defeat';
       $('endtitle').style.color = won ? '#9af0a6' : '#ff8e7e';
       const s = Math.floor(game.time);

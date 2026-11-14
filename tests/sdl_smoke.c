@@ -74,6 +74,29 @@ int main(int argc, char **argv) {
   Rc st = menu_start_rc();
   click(SDL_BUTTON_LEFT, st.x + 10, st.y + 10, 0);
   CHECK(screen == SCR_PLAY && inGame, "Start Game begins a game");
+  if (audioDev) {                                   /* the dummy audio driver opens a real (silent) device, so the synth can be checked */
+    int sawM = muted; muted = 0;
+    #define VOICES_ON() ({ int c_ = 0; for (int v_ = 0; v_ < NVOICES; v_++) c_ += voices[v_].on; c_; })
+    SDL_LockAudioDevice(audioDev); for (int v = 0; v < NVOICES; v++) voices[v].on = 0; SDL_UnlockAudioDevice(audioDev);
+    sfx(SFX_WIN);
+    CHECK(VOICES_ON() == 4, "the victory jingle starts four voices");
+    float buf[2048]; int bad = 0; float peak = 0;
+    SDL_LockAudioDevice(audioDev);
+    audio_cb(NULL, (Uint8 *)buf, sizeof buf);
+    SDL_UnlockAudioDevice(audioDev);
+    for (int i = 0; i < 2048; i++) { if (!(fabsf(buf[i]) <= 1.0f)) bad++; if (fabsf(buf[i]) > peak) peak = fabsf(buf[i]); }
+    CHECK(!bad && peak > 0.01f, "the synth renders audible, finite samples");
+    SDL_LockAudioDevice(audioDev); for (int v = 0; v < NVOICES; v++) voices[v].on = 0; SDL_UnlockAudioDevice(audioDev);
+    sound_reset(); sound_tick(0.01f, 10, 500, 0, 1); sound_tick(0.01f, 9, 480, 0, 1);
+    CHECK(VOICES_ON() >= 3, "a unit dying plays a hit and a death sound");
+    SDL_LockAudioDevice(audioDev); for (int v = 0; v < NVOICES; v++) voices[v].on = 0; SDL_UnlockAudioDevice(audioDev);
+    sound_reset(); musicOn = 1; sound_tick(1.5f, 10, 500, 0, 1);
+    CHECK(VOICES_ON() >= 1, "background music starts a note");
+    musicOn = 0; SDL_LockAudioDevice(audioDev); for (int v = 0; v < NVOICES; v++) voices[v].on = 0; SDL_UnlockAudioDevice(audioDev);
+    sound_reset(); sound_tick(1.5f, 10, 500, 0, 1);
+    CHECK(VOICES_ON() == 0, "N turns the music off");
+    musicOn = 1; muted = sawM;
+  }
   { int water = 0; for (int i = 0; i < MAP_W * MAP_H; i++) water += mTerrain[i] == TILE_WATER; CHECK(water > 120 && water < 800, "the river map has water"); }
   step(3);
 

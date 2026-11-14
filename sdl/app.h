@@ -75,24 +75,25 @@ static void add_fx(float x, float y, unsigned color) {
  * device can be opened the game simply runs silent. */
 
 typedef struct { float f, vol, gain, k, phase, delay, left; int wave, on; } Voice;
-static Voice voices[24];
+#define NVOICES 32
+static Voice voices[NVOICES];
 static SDL_AudioDeviceID audioDev;
 static int audioRate = 44100, muted;
-enum { W_SQUARE, W_TRI, W_SAW };
+enum { W_SQUARE, W_TRI, W_SAW, W_SINE };
 
 static void audio_cb(void *ud, Uint8 *stream, int len) {
   (void)ud;
   float *out = (float *)stream;
   int n = len / (int)sizeof(float);
   memset(out, 0, (size_t)len);
-  for (int v = 0; v < 24; v++) {
+  for (int v = 0; v < NVOICES; v++) {
     Voice *p = &voices[v];
     if (!p->on) continue;
     for (int i = 0; i < n; i++) {
       if (p->delay > 0) { p->delay -= 1.0f / audioRate; continue; }
       if (p->left <= 0) { p->on = 0; break; }
       p->phase += p->f / audioRate; if (p->phase >= 1) p->phase -= 1;
-      float s = p->wave == W_SQUARE ? (p->phase < 0.5f ? 1.f : -1.f) : p->wave == W_TRI ? 4 * fabsf(p->phase - 0.5f) - 1 : 2 * p->phase - 1;
+      float s = p->wave == W_SINE ? sinf(6.2831853f * p->phase) : p->wave == W_SQUARE ? (p->phase < 0.5f ? 1.f : -1.f) : p->wave == W_TRI ? 4 * fabsf(p->phase - 0.5f) - 1 : 2 * p->phase - 1;
       out[i] += s * p->gain;
       p->gain *= p->k;
       p->left -= 1.0f / audioRate;
@@ -112,7 +113,7 @@ static void audio_init(void) {
 static void tone(float f, float dur, int wave, float vol, float delay) {
   if (!audioDev) return;
   SDL_LockAudioDevice(audioDev);
-  for (int i = 0; i < 24; i++) if (!voices[i].on) {
+  for (int i = 0; i < NVOICES; i++) if (!voices[i].on) {
     Voice *p = &voices[i];
     p->f = f; p->vol = vol; p->gain = vol; p->wave = wave; p->phase = 0; p->delay = delay; p->left = dur;
     p->k = expf(logf(0.0001f / vol) / (dur * audioRate));
@@ -121,7 +122,7 @@ static void tone(float f, float dur, int wave, float vol, float delay) {
   }
   SDL_UnlockAudioDevice(audioDev);
 }
-enum { SFX_SELECT, SFX_ORDER, SFX_ERR, SFX_BUILD, SFX_ALERT, SFX_PLACE };
+enum { SFX_SELECT, SFX_ORDER, SFX_ERR, SFX_BUILD, SFX_ALERT, SFX_PLACE, SFX_HIT, SFX_ARROW, SFX_DIE, SFX_WIN, SFX_LOSE };
 static void sfx(int kind) {
   if (muted) return;
   switch (kind) {
@@ -131,7 +132,35 @@ static void sfx(int kind) {
     case SFX_BUILD: tone(520, 0.12f, W_TRI, 0.06f, 0); tone(660, 0.12f, W_TRI, 0.06f, 0.1f); tone(780, 0.2f, W_TRI, 0.06f, 0.2f); break;
     case SFX_ALERT: tone(330, 0.2f, W_SAW, 0.06f, 0); tone(250, 0.3f, W_SAW, 0.06f, 0.2f); break;
     case SFX_PLACE: tone(240, 0.1f, W_SQUARE, 0.05f, 0); break;
+    case SFX_HIT: tone(140, 0.07f, W_SQUARE, 0.05f, 0); tone(95, 0.09f, W_SAW, 0.04f, 0.01f); break;
+    case SFX_ARROW: tone(1300, 0.05f, W_TRI, 0.025f, 0); tone(900, 0.07f, W_TRI, 0.02f, 0.04f); break;
+    case SFX_DIE: tone(300, 0.12f, W_SAW, 0.04f, 0); tone(180, 0.25f, W_SAW, 0.04f, 0.1f); break;
+    case SFX_WIN: { static const float f[4] = { 523, 659, 784, 1047 }; for (int i = 0; i < 4; i++) tone(f[i], i == 3 ? 0.6f : 0.2f, W_TRI, 0.07f, i * 0.15f); break; }
+    case SFX_LOSE: { static const float f[4] = { 330, 262, 220, 165 }; for (int i = 0; i < 4; i++) tone(f[i], i == 3 ? 0.8f : 0.3f, W_SAW, 0.05f, i * 0.25f); break; }
   }
+}
+
+/* Combat sounds are worked out from how the snapshot changes between frames (the simulation has no audio hooks);
+ * the music is a slow generative pad over a low drone. Same design as soundReset/combatSound/musicTick in js/ui.js. */
+static struct { int n, proj; float hp, hit, arrow, die, music; int step; unsigned seed; } snd = { -1, 0, 0, 0, 0, 0, 0, 0, 7 };
+static int musicOn = 1;
+static void sound_reset(void) { snd.n = -1; snd.music = 1; snd.step = 0; }
+static void sound_tick(float dt, int n, float hp, int proj, int active) {
+  snd.hit -= dt; snd.arrow -= dt; snd.die -= dt;
+  if (snd.n >= 0) {
+    if (n < snd.n && snd.die <= 0) { sfx(SFX_DIE); snd.die = 0.25f; }
+    if (proj > snd.proj && snd.arrow <= 0) { sfx(SFX_ARROW); snd.arrow = 0.15f; }
+    if (hp < snd.hp - 0.5f && snd.hit <= 0) { sfx(SFX_HIT); snd.hit = 0.12f; }
+  }
+  snd.n = n; snd.hp = hp; snd.proj = proj;
+  if (!active || muted || !musicOn || !audioDev) return;
+  snd.music -= dt;
+  if (snd.music > 0) return;
+  static const float scale[7] = { 220, 261.63f, 293.66f, 329.63f, 392, 440, 523.25f };
+  snd.music = 1.3f; snd.step++;
+  snd.seed = (snd.seed * 1103515245u + 12345u) & 0x7fffffffu;
+  tone(scale[(snd.seed >> 8) % 7], 2.6f, W_TRI, 0.016f, 0);
+  if (snd.step % 4 == 1) tone(snd.step % 8 == 1 ? 110.f : 82.41f, 5.2f, W_SINE, 0.03f, 0);
 }
 
 /* ------------------------------- small helpers ------------------------------- */

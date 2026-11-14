@@ -84,6 +84,6 @@ make fuzz-sdl       # random-input fuzz of the UI under ASan + UBSan (./build/sd
 ./build/peakkk_sdl --start --difficulty hard --map river --seed 7
 ```
 
-Controls are the same as in the browser (press **F1**), except that the HUD uses a built-in ASCII bitmap font, so units, buildings and commands are labelled with letters and short names instead of emoji. Sound uses the same tiny synth as the web version; if no audio device can be opened the game just runs silent. `--frames N --shot out.bmp` runs N frames at a fixed timestep and saves a screenshot, which is handy for CI.
+Controls are the same as in the browser (press **F1**), except that the HUD uses a built-in ASCII bitmap font, so units, buildings and commands are labelled with letters and short names instead of emoji. Sound uses the same tiny synth as the web version (UI blips, melee hits, arrows, deaths, victory and defeat jingles and a quiet generative background music; **M** mutes everything, **N** just the music); if no audio device can be opened the game just runs silent. `--frames N --shot out.bmp` runs N frames at a fixed timestep and saves a screenshot, which is handy for CI.
 
 The core picks the terrain with `g_set_map(n)` before `g_init` (default 0, the classic lake). Map names live in `js/defs.js` (`MAPS`). `sdl/gamedata.h` (names, descriptions, team colours, map names) is generated from `js/defs.js` by `tools/gen_sdl_data.js`; `make` keeps it up to date.

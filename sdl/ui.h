@@ -497,6 +497,7 @@ static void process_events(void) {
 /* ------------------------------ starting a game ------------------------------ */
 
 static void ui_start_game(int diff, unsigned seed) {
+  sound_reset();
   g_set_map(mapChoice);
   g_init(seed, diff, 1 << 1);
   model_bind_terrain();
@@ -528,7 +529,7 @@ static void ui_layout(void) {
 
 /* the end-of-game panel is shown once per game, after which the player can still look at the map or go to the menu */
 static void check_end(void) {
-  if (mWinner >= 0 && !endShown) { endShown = 1; overlayPanel = PANEL_END; }
+  if (mWinner >= 0 && !endShown) { endShown = 1; overlayPanel = PANEL_END; sfx(mWinner == 0 ? SFX_WIN : SFX_LOSE); }
 }
 
 static void ui_update(float dt) {
@@ -550,6 +551,8 @@ static void ui_update(float dt) {
   if (placingOn) update_placing();
   hoverId = (mouse.seen && !overlay_open() && !placingOn && !mouse.drag && !mouse.mid && in_world(mouse.y)) ? pick_at(mouse.x, mouse.y) : 0;
   if (diffToastTimer > 0 && (diffToastTimer -= dt) <= 0) toast(0, "Enemy difficulty: %s - Map: %s", DIFF_NAME[diffChoice], MAP_NAME[mapChoice]);
+  { float hp = 0; for (int i = 0; i < nUnits; i++) hp += mUnits[i].hp; for (int i = 0; i < nBlds; i++) if (mBlds[i].done) hp += mBlds[i].hp;
+    sound_tick(dt, nUnits, hp, nProjs, !paused && !overlay_open()); }
   check_end();
   get_commands();
 }
@@ -891,7 +894,7 @@ static const char *HELP_ROWS[][2] = {
   { "1-9, Ctrl/Shift + 1-9", "Recall / assign a control group" },
   { ". (period)", "Select next idle builder" },
   { "Space", "Jump to selection (or Town Center)" },
-  { "P, Esc, M", "Pause, cancel placement / deselect, sound on / off" },
+  { "P, Esc, M, N", "Pause, cancel placement / deselect, sound on / off, music on / off" },
   { "F1, F11", "This help, fullscreen on / off" },
 };
 #define HELP_N ((int)(sizeof HELP_ROWS / sizeof HELP_ROWS[0]))
@@ -1100,6 +1103,7 @@ static void on_key(SDL_Scancode sc, int mod) {
     case SDL_SCANCODE_SPACE: center_selection(); return;
     case SDL_SCANCODE_PERIOD: cycle_idle(); return;
     case SDL_SCANCODE_M: muted = !muted; toast(0, muted ? "Sound off" : "Sound on"); return;
+    case SDL_SCANCODE_N: musicOn = !musicOn; toast(0, musicOn ? "Music on" : "Music off"); return;
     default: break;
   }
   if (ctrl || (mod & KMOD_ALT)) return;
