@@ -104,18 +104,42 @@ function combatSound(dt) {
   }
   snd.n = n; snd.hp = hp; snd.proj = np;
 }
-/* A slow generative pad: notes of an A-minor pentatonic scale drift over a low drone. Quiet on purpose. */
-const SCALE = [220, 261.63, 293.66, 329.63, 392, 440, 523.25];
+/* Background music: the tune in MUSIC (js/defs.js), played as a plucked lute lead (a flute on the repeat), plucked bass,
+ * a held drone on D and A and a soft tabor drum, then a pause before it starts again. snd.step counts eighth notes. */
+const midiHz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+function toneHold(f, d, type, vol, when) {        // sustained note: short attack, hold, release
+  const t = actx.currentTime + (when || 0);
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.value = f;
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + 0.05);
+  g.gain.setValueAtTime(vol, t + d * 0.7); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+  o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t + d + 0.02);
+}
+function pluck(f, d, vol) { tone(f, d, 'triangle', vol); tone(f * 2, d * 0.5, 'sine', vol * 0.4); }
+function flute(f, d, vol) { toneHold(f, d, 'sine', vol); toneHold(f * 2, d, 'sine', vol * 0.15); }
+const musicLen = (MUSIC.form.length * 24) + MUSIC.rest;
+function musicStep(i) {
+  const ph = Math.floor(i / 24);
+  if (ph >= MUSIC.form.length) return;            // resting
+  const P = MUSIC[MUSIC.form[ph]], pos = i % 24, e = MUSIC.eighth;
+  if (i === 0) MUSIC.drone.forEach((m, k) => toneHold(midiHz(m), 12 * e + 0.5, 'triangle', k ? 0.012 : 0.018));
+  if (pos % 12 === 0 && i > 0) MUSIC.drone.forEach((m, k) => toneHold(midiHz(m), 12 * e + 0.5, 'triangle', k ? 0.012 : 0.018));
+  let at = 0;
+  for (const [m, len] of P.melody) {               // melody note starting on this eighth
+    if (at === pos) { const f = midiHz(m), d = len * e * 1.5; if (ph % 2) flute(f, d, 0.03); else pluck(f, Math.min(d, 1.1), 0.04); }
+    at += len;
+  }
+  if (pos % 6 === 0) { pluck(midiHz(P.bass[pos / 6] - 12), 0.9, 0.05); tone(95, 0.12, 'sine', 0.07); tone(60, 0.18, 'sine', 0.06); }
+  if (pos % 6 === 3) { pluck(midiHz(P.bass[(pos - 3) / 6] - 12 + 7), 0.5, 0.025); tone(95, 0.1, 'sine', 0.035); }
+}
 function musicTick(dt) {
   if (muted || !musicOn || !actx || actx.state !== 'running') return;
   snd.music -= dt;
-  if (snd.music > 0) return;
-  snd.music = 1.3; snd.step++;
-  snd.seed = (snd.seed * 1103515245 + 12345) & 0x7fffffff;
-  try {
-    tone(SCALE[(snd.seed >> 8) % SCALE.length], 2.6, 'triangle', 0.016);
-    if (snd.step % 4 === 1) tone(snd.step % 8 === 1 ? 110 : 82.41, 5.2, 'sine', 0.03);
-  } catch (e) { /* audio is optional */ }
+  for (let n = 0; snd.music <= 0 && n < 4; n++) {  // catch up after a stall, but never burst
+    try { musicStep(snd.step % musicLen); } catch (e) { /* audio is optional */ }
+    snd.step++; snd.music += MUSIC.eighth;
+  }
+  if (snd.music < -1) snd.music = 0;
 }
 
 /* ------------------------------ Small helpers ---------------------------- */

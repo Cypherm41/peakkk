@@ -74,8 +74,8 @@ static void add_fx(float x, float y, unsigned color) {
 /* Tiny synth: a few decaying oscillators, the same tones js/ui.js plays through WebAudio. Optional: if no audio
  * device can be opened the game simply runs silent. */
 
-typedef struct { float f, vol, gain, k, phase, delay, left; int wave, on; } Voice;
-#define NVOICES 32
+typedef struct { float f, vol, gain, k, phase, delay, left, hold; int wave, on; } Voice;   /* hold > 0: sustained note (attack, hold, release) */
+#define NVOICES 48
 static Voice voices[NVOICES];
 static SDL_AudioDeviceID audioDev;
 static int audioRate = 44100, muted;
@@ -95,7 +95,8 @@ static void audio_cb(void *ud, Uint8 *stream, int len) {
       p->phase += p->f / audioRate; if (p->phase >= 1) p->phase -= 1;
       float s = p->wave == W_SINE ? sinf(6.2831853f * p->phase) : p->wave == W_SQUARE ? (p->phase < 0.5f ? 1.f : -1.f) : p->wave == W_TRI ? 4 * fabsf(p->phase - 0.5f) - 1 : 2 * p->phase - 1;
       out[i] += s * p->gain;
-      p->gain *= p->k;
+      if (p->hold > 0) { p->hold -= 1.0f / audioRate; if (p->gain < p->vol) { p->gain += p->vol / (0.05f * audioRate); if (p->gain > p->vol) p->gain = p->vol; } }
+      else p->gain *= p->k;
       p->left -= 1.0f / audioRate;
     }
   }
@@ -110,18 +111,21 @@ static void audio_init(void) {
   audioRate = have.freq;
   SDL_PauseAudioDevice(audioDev, 0);
 }
-static void tone(float f, float dur, int wave, float vol, float delay) {
+static void voice_start(float f, float dur, int wave, float vol, float delay, int sustain) {
   if (!audioDev) return;
   SDL_LockAudioDevice(audioDev);
   for (int i = 0; i < NVOICES; i++) if (!voices[i].on) {
     Voice *p = &voices[i];
-    p->f = f; p->vol = vol; p->gain = vol; p->wave = wave; p->phase = 0; p->delay = delay; p->left = dur;
-    p->k = expf(logf(0.0001f / vol) / (dur * audioRate));
+    p->f = f; p->vol = vol; p->gain = sustain ? 0 : vol; p->wave = wave; p->phase = 0; p->delay = delay; p->left = dur;
+    p->hold = sustain ? dur * 0.7f : 0;
+    p->k = expf(logf(0.0001f / vol) / (dur * (sustain ? 0.3f : 1.0f) * audioRate));
     p->on = 1;
     break;
   }
   SDL_UnlockAudioDevice(audioDev);
 }
+static void tone(float f, float dur, int wave, float vol, float delay) { voice_start(f, dur, wave, vol, delay, 0); }
+static void tone_hold(float f, float dur, int wave, float vol, float delay) { voice_start(f, dur, wave, vol, delay, 1); }
 enum { SFX_SELECT, SFX_ORDER, SFX_ERR, SFX_BUILD, SFX_ALERT, SFX_PLACE, SFX_HIT, SFX_ARROW, SFX_DIE, SFX_WIN, SFX_LOSE };
 static void sfx(int kind) {
   if (muted) return;
@@ -140,11 +144,32 @@ static void sfx(int kind) {
   }
 }
 
-/* Combat sounds are worked out from how the snapshot changes between frames (the simulation has no audio hooks);
- * the music is a slow generative pad over a low drone. Same design as soundReset/combatSound/musicTick in js/ui.js. */
-static struct { int n, proj; float hp, hit, arrow, die, music; int step; unsigned seed; } snd = { -1, 0, 0, 0, 0, 0, 0, 0, 7 };
+/* Combat sounds are worked out from how the snapshot changes between frames (the simulation has no audio hooks). The
+ * music is the tune in MUSIC (js/defs.js, generated into gamedata.h), played the same way as musicStep in js/ui.js:
+ * plucked lute lead (a flute on the repeat), plucked bass, held drone on D and A, a soft tabor, then a pause. */
+static struct { int n, proj, step; float hp, hit, arrow, die, music; } snd = { -1, 0, 0, 0, 0, 0, 0, 0 };
 static int musicOn = 1;
 static void sound_reset(void) { snd.n = -1; snd.music = 1; snd.step = 0; }
+static float midi_hz(int m) { return 440.0f * powf(2.0f, (float)(m - 69) / 12.0f); }
+static void pluck(float f, float d, float vol) { tone(f, d, W_TRI, vol, 0); tone(f * 2, d * 0.5f, W_SINE, vol * 0.4f, 0); }
+static void flute(float f, float d, float vol) { tone_hold(f, d, W_SINE, vol, 0); tone_hold(f * 2, d, W_SINE, vol * 0.15f, 0); }
+static void drone(void) {
+  for (int k = 0; k < 2; k++) tone_hold(midi_hz(MUSIC_DRONE[k]), 12 * MUSIC_EIGHTH + 0.5f, W_TRI, k ? 0.012f : 0.018f, 0);
+}
+static void music_step(int i) {
+  int phrases = (int)sizeof MUSIC_FORM - 1, ph = i / 24;
+  if (ph >= phrases) return;                                   /* resting */
+  int pos = i % 24, count = MUSIC_FORM[ph] == 'A' ? MUSIC_A_COUNT : MUSIC_B_COUNT;
+  const int (*notes)[2] = MUSIC_FORM[ph] == 'A' ? MUSIC_A_NOTES : MUSIC_B_NOTES;
+  const int *bass = MUSIC_FORM[ph] == 'A' ? MUSIC_A_BASS : MUSIC_B_BASS;
+  if (pos % 12 == 0) drone();
+  for (int k = 0, at = 0; k < count; at += notes[k][1], k++) if (at == pos) {
+    float f = midi_hz(notes[k][0]), d = notes[k][1] * MUSIC_EIGHTH * 1.5f;
+    if (ph % 2) flute(f, d, 0.03f); else pluck(f, d < 1.1f ? d : 1.1f, 0.04f);
+  }
+  if (pos % 6 == 0) { pluck(midi_hz(bass[pos / 6] - 12), 0.9f, 0.05f); tone(95, 0.12f, W_SINE, 0.07f, 0); tone(60, 0.18f, W_SINE, 0.06f, 0); }
+  if (pos % 6 == 3) { pluck(midi_hz(bass[(pos - 3) / 6] - 12 + 7), 0.5f, 0.025f); tone(95, 0.1f, W_SINE, 0.035f, 0); }
+}
 static void sound_tick(float dt, int n, float hp, int proj, int active) {
   snd.hit -= dt; snd.arrow -= dt; snd.die -= dt;
   if (snd.n >= 0) {
@@ -154,13 +179,10 @@ static void sound_tick(float dt, int n, float hp, int proj, int active) {
   }
   snd.n = n; snd.hp = hp; snd.proj = proj;
   if (!active || muted || !musicOn || !audioDev) return;
+  int len = ((int)sizeof MUSIC_FORM - 1) * 24 + MUSIC_REST;
   snd.music -= dt;
-  if (snd.music > 0) return;
-  static const float scale[7] = { 220, 261.63f, 293.66f, 329.63f, 392, 440, 523.25f };
-  snd.music = 1.3f; snd.step++;
-  snd.seed = (snd.seed * 1103515245u + 12345u) & 0x7fffffffu;
-  tone(scale[(snd.seed >> 8) % 7], 2.6f, W_TRI, 0.016f, 0);
-  if (snd.step % 4 == 1) tone(snd.step % 8 == 1 ? 110.f : 82.41f, 5.2f, W_SINE, 0.03f, 0);
+  for (int k = 0; snd.music <= 0 && k < 4; k++) { music_step(snd.step % len); snd.step++; snd.music += MUSIC_EIGHTH; }
+  if (snd.music < -1) snd.music = 0;
 }
 
 /* ------------------------------- small helpers ------------------------------- */

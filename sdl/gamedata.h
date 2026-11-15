@@ -69,6 +69,16 @@ static const char *MAP_DESC[5] = {
   /* ponds */ "Scattered ponds break up the land. Lots of room to expand, lots of detours.",
   /* forest */ "Thick woods fill the map. Lumber is plentiful; only a narrow road links the bases.",
 };
+static const int MUSIC_A_NOTES[][2] = { { 62, 2 }, { 65, 1 }, { 69, 3 }, { 67, 2 }, { 65, 1 }, { 64, 3 }, { 62, 2 }, { 65, 1 }, { 69, 2 }, { 72, 1 }, { 71, 2 }, { 69, 1 }, { 69, 3 } };
+#define MUSIC_A_COUNT 13
+static const int MUSIC_A_BASS[4] = { 50, 50, 55, 57 };
+static const int MUSIC_B_NOTES[][2] = { { 69, 2 }, { 72, 1 }, { 74, 3 }, { 72, 2 }, { 69, 1 }, { 67, 3 }, { 65, 2 }, { 67, 1 }, { 69, 2 }, { 65, 1 }, { 64, 2 }, { 65, 1 }, { 62, 3 } };
+#define MUSIC_B_COUNT 13
+static const int MUSIC_B_BASS[4] = { 57, 55, 53, 50 };
+static const char MUSIC_FORM[] = "AABA";
+#define MUSIC_EIGHTH 0.27f
+#define MUSIC_REST 30
+static const int MUSIC_DRONE[2] = { 38, 45 };
 #define MAP_COUNT 5
 
 static const float BLD_HEIGHT[10] = { 44.0f, 20.0f, 2.0f, 18.0f, 28.0f, 26.0f, 26.0f, 26.0f, 24.0f, 54.0f };

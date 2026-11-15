@@ -30,6 +30,14 @@ arr('TECH_DESC', D.TECH_KEYS, (k) => D.TECHS[k].desc);
 arr('NODE_NAME', D.NODE_KEYS, (k) => D.NODE_DEFS[k].name);
 arr('MAP_NAME', D.MAP_KEYS, (k) => D.MAPS[k].name);
 arr('MAP_DESC', D.MAP_KEYS, (k) => D.MAPS[k].desc);
+for (const ph of ['A', 'B']) {
+  o += `static const int MUSIC_${ph}_NOTES[][2] = { ${D.MUSIC[ph].melody.map((n) => `{ ${n[0]}, ${n[1]} }`).join(', ')} };\n`;
+  o += `#define MUSIC_${ph}_COUNT ${D.MUSIC[ph].melody.length}\n`;
+  o += `static const int MUSIC_${ph}_BASS[4] = { ${D.MUSIC[ph].bass.join(', ')} };\n`;
+}
+o += `static const char MUSIC_FORM[] = "${D.MUSIC.form.join('')}";\n`;
+o += `#define MUSIC_EIGHTH ${D.MUSIC.eighth}f\n#define MUSIC_REST ${D.MUSIC.rest}\n`;
+o += `static const int MUSIC_DRONE[2] = { ${D.MUSIC.drone.join(', ')} };\n`;
 o += `#define MAP_COUNT ${D.MAP_KEYS.length}\n`;
 
 o += `\nstatic const float BLD_HEIGHT[${D.BUILDING_KEYS.length}] = { ${D.BUILDING_KEYS.map((k) => (D.BUILDING_DEFS[k].height || 20) + '.0f').join(', ')} };\n`;

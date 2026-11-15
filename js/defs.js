@@ -157,6 +157,19 @@ const MAPS = {
 };
 const MAP_KEYS = Object.keys(MAPS);
 
+/* Background music: an original 6/8 dance tune in D Dorian. Notes are [midi, length in eighth notes]; every phrase is
+ * four bars of six eighths. `bass` holds one root note per bar. The form plays the phrases in order, then rests. */
+const MUSIC = {
+  eighth: 0.27,                                   // seconds per eighth note (about 111 bpm dotted-quarter pulse)
+  A: { melody: [[62, 2], [65, 1], [69, 3],  [67, 2], [65, 1], [64, 3],  [62, 2], [65, 1], [69, 2], [72, 1],  [71, 2], [69, 1], [69, 3]],
+       bass: [50, 50, 55, 57] },
+  B: { melody: [[69, 2], [72, 1], [74, 3],  [72, 2], [69, 1], [67, 3],  [65, 2], [67, 1], [69, 2], [65, 1],  [64, 2], [65, 1], [62, 3]],
+       bass: [57, 55, 53, 50] },
+  form: ['A', 'A', 'B', 'A'],
+  rest: 30,                                       // silent eighths between two performances
+  drone: [38, 45],                                // D2 and A2 held under the whole piece
+};
+
 /* -------------------------------- Helpers -------------------------------- */
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -174,7 +187,7 @@ const centerOf = (e) => (e.kind === 'unit' ? { x: e.x, y: e.y } : { x: e.x + e.w
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     MAP_W, MAP_H, TILE_W, TILE_H, MAX_POP, T_GRASS, T_WATER, T_SAND, FARM_RATE, FARM_SLOTS, TEAMS, RES_ICON, RES_LIST,
-    ATK_TYPES, CLASSES, NODE_DEFS, UNIT_DEFS, BUILDING_DEFS, TECHS, DIFFS, MAPS, MAP_KEYS, UNIT_KEYS, BUILDING_KEYS, NODE_KEYS, TECH_KEYS, DIFF_KEYS,
+    ATK_TYPES, CLASSES, NODE_DEFS, UNIT_DEFS, BUILDING_DEFS, TECHS, DIFFS, MAPS, MAP_KEYS, MUSIC, UNIT_KEYS, BUILDING_KEYS, NODE_KEYS, TECH_KEYS, DIFF_KEYS,
     clamp, dist, canAfford, missingRes, centerOf,
   };
 }
