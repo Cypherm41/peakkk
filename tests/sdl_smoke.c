@@ -52,6 +52,9 @@ int main(int argc, char **argv) {
   if (!ui_init("sdl smoke", 1280, 800, 1)) { printf("FAIL: ui_init: %s\n", SDL_GetError()); return 1; }
 
   /* ---- menu ---- */
+  CHECK(fogChoice == 1, "fog of war is on by default");
+  { Rc f = menu_fog_rc(); click(SDL_BUTTON_LEFT, f.x + 5, f.y + 5, 0); CHECK(fogChoice == 0, "the menu button turns fog of war off"); click(SDL_BUTTON_LEFT, f.x + 5, f.y + 5, 0); CHECK(fogChoice == 1, "and back on"); }
+  fogChoice = 0;                                   /* the gameplay checks below look at the enemy, so run them with the full view */
   step(2);
   CHECK(screen == SCR_MENU && !inGame, "starts on the menu");
   shot(shots, "menu");
@@ -290,6 +293,16 @@ int main(int argc, char **argv) {
   key(SDL_SCANCODE_RETURN, 0);
   CHECK(screen == SCR_PLAY && mWinner == -1 && count_units(0, U_BUILDER) == 5, "Enter on the menu starts a fresh game");
 
+  /* ---- fog of war ---- */
+  fogChoice = 1; ui_start_game(1, 777); step(3);
+  { int enemy = 0; for (int i = 0; i < nUnits; i++) enemy += mUnits[i].team == 1; for (int i = 0; i < nBlds; i++) enemy += mBlds[i].team == 1;
+    CHECK(enemy == 0 && count_units(0, U_BUILDER) == 5, "with fog the enemy base is not in the snapshot, ours is");
+    CHECK(mFog[36 * MAP_W + 11] == 2 && mFog[36 * MAP_W + 60] == 0, "our base is in sight, the enemy base unexplored");
+    shot(shots, "fog_start");
+    int hit = pick_at(W / 2.0f, H / 2.0f); (void)hit; }
+  fogChoice = 0; ui_start_game(1, 777); step(3);
+  { int enemy = 0; for (int i = 0; i < nUnits; i++) enemy += mUnits[i].team == 1;
+    CHECK(enemy > 0 && mFog[36 * MAP_W + 60] == 2, "without fog the whole map is visible"); }
   printf("%d checks, %d failed\n", checks, failures);
   ui_shutdown();
   return failures ? 1 : 0;

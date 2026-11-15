@@ -23,7 +23,8 @@ let placing = null;       // { type, x, y, valid }
 let cmdMode = null;       // 'attackmove'
 let paused = false, speed = 1, lastT = 0, hudTimer = 0, idleIdx = 0;
 let diffChoice = 'normal';
-try { const v = JSON.parse(localStorage.getItem('peakkk.menu') || '{}'); if (DIFFS[v.d]) diffChoice = v.d; if (MAPS[v.m]) var savedMap = v.m; } catch (e) {}
+try { const v = JSON.parse(localStorage.getItem('peakkk.menu') || '{}'); if (DIFFS[v.d]) diffChoice = v.d; if (MAPS[v.m]) var savedMap = v.m; if (v.f === false) var savedFog = false; } catch (e) {}
+let fogChoice = (typeof savedFog === 'undefined');
 let mapChoice = (typeof savedMap === 'string') ? savedMap : 'lake';
 let curCmds = new Array(12).fill(null);
 let cmdSig = '';
@@ -586,6 +587,7 @@ function render() {
   vis.x0 = Math.max(0, Math.floor(Math.min(...cs.map((c) => c[0]))) - 1); vis.x1 = Math.min(MAP_W - 1, Math.ceil(Math.max(...cs.map((c) => c[0]))) + 1);
   vis.y0 = Math.max(0, Math.floor(Math.min(...cs.map((c) => c[1]))) - 1); vis.y1 = Math.min(MAP_H - 1, Math.ceil(Math.max(...cs.map((c) => c[1]))) + 1);
 
+  if (game.fogOn) updateFogAlpha();
   drawTerrain(vis, now);
 
   // selection footprints & rally lines (on the ground)
@@ -652,6 +654,8 @@ function render() {
     else { ctx.globalAlpha = Math.min(1, a * 2); ctx.font = 'bold 13px Georgia'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.strokeText(e.text, x, y); ctx.fillStyle = e.color; ctx.fillText(e.text, x, y); ctx.globalAlpha = 1; }
   }
 
+  if (game.fogOn) drawFog(vis);
+
   // health bars
   for (const e of list) {
     if (e.kind === 'node') continue;
@@ -681,6 +685,33 @@ function render() {
     const x = Math.min(mouse.sx, mouse.x), y = Math.min(mouse.sy, mouse.y), w = Math.abs(mouse.x - mouse.sx), h = Math.abs(mouse.y - mouse.sy);
     ctx.fillStyle = 'rgba(100,255,130,.12)'; ctx.fillRect(x, y, w, h);
     ctx.strokeStyle = '#7dff91'; ctx.lineWidth = 1.5; ctx.strokeRect(x, y, w, h);
+  }
+}
+
+/* ------------------------------- Fog of war ------------------------------ */
+/* game.fog marks every tile 0 (never seen), 1 (explored) or 2 (in sight). Each frame it is turned into a darkness value
+ * per tile (1 = black, 0.5 = dim, 0 = clear) and blurred over the neighbouring tiles so the edge fades softly. */
+const fogA = new Float32Array(MAP_W * MAP_H);
+function updateFogAlpha() {
+  const f = game.fog;
+  for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
+    let sum = 0, n = 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const xx = x + dx, yy = y + dy;
+      if (xx < 0 || yy < 0 || xx >= MAP_W || yy >= MAP_H) { sum += 1; n++; continue; }   // beyond the edge counts as unexplored
+      const v = f[yy * MAP_W + xx]; sum += v === 0 ? 1 : v === 1 ? 0.5 : 0; n++;
+    }
+    fogA[y * MAP_W + x] = f[y * MAP_W + x] === 0 ? Math.max(0.92, sum / n) : sum / n;
+  }
+}
+function drawFog(vis) {
+  for (let y = vis.y0; y <= vis.y1; y++) for (let x = vis.x0; x <= vis.x1; x++) {
+    const a = fogA[y * MAP_W + x];
+    if (a < 0.03) continue;
+    const cx = isoX(x, y), cy = isoY(x, y);
+    if (cx < vis.l - 40 || cx > vis.r + 40 || cy < vis.t - 20 || cy > vis.b + 20) continue;
+    ctx.fillStyle = 'rgba(8,12,9,' + a.toFixed(2) + ')';
+    ctx.beginPath(); ctx.moveTo(cx, cy - 1.6); ctx.lineTo(cx + 34, cy + 16); ctx.lineTo(cx, cy + 34); ctx.lineTo(cx - 34, cy + 16); ctx.closePath(); ctx.fill();
   }
 }
 
@@ -716,6 +747,14 @@ function drawMinimap() {
   for (const u of game.units) {
     const p = mini(u.x, u.y);
     mctx.fillStyle = TEAMS[u.team].color; mctx.fillRect(p[0] - 1, p[1] - 1, 2.2, 2.2);
+  }
+  if (game.fogOn) {
+    for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
+      const a = fogA[y * MAP_W + x]; if (a < 0.03) continue;
+      const q0 = mini(x, y), q1 = mini(x + 1, y), q2 = mini(x + 1, y + 1), q3 = mini(x, y + 1);
+      mctx.fillStyle = 'rgba(8,12,9,' + a.toFixed(2) + ')';
+      mctx.beginPath(); mctx.moveTo(q0[0], q0[1] - 0.5); mctx.lineTo(q1[0] + 0.6, q1[1]); mctx.lineTo(q2[0], q2[1] + 0.6); mctx.lineTo(q3[0] - 0.6, q3[1]); mctx.closePath(); mctx.fill();
+    }
   }
   for (const pg of pings) {
     const p = mini(pg.x, pg.y), r = 3 + pg.t * 10;
@@ -1185,8 +1224,11 @@ function setMapChoice(k) {
 }
 for (const b of document.querySelectorAll('.map')) b.addEventListener('click', () => setMapChoice(b.dataset.m));
 setMapChoice(mapChoice);
+function setFogChoice(on) { fogChoice = on; $('fogbtn').textContent = on ? 'On' : 'Off'; $('fogbtn').classList.toggle('sel', on); }
+$('fogbtn').addEventListener('click', () => setFogChoice(!fogChoice));
+setFogChoice(fogChoice);
 $('btn-start').addEventListener('click', () => {
-  try { localStorage.setItem('peakkk.menu', JSON.stringify({ d: diffChoice, m: mapChoice })); } catch (e) {}
+  try { localStorage.setItem('peakkk.menu', JSON.stringify({ d: diffChoice, m: mapChoice, f: fogChoice })); } catch (e) {}
   startGame(diffChoice);
 });
 $('btn-again').addEventListener('click', () => showPanel('menu'));
@@ -1205,7 +1247,7 @@ function cameraTick(dt) {
 
 let endShown = false;   // the end panel opens once per game, so 'Play Again' can reach the menu
 function startGame(diff) {
-  game = new Game({ difficulty: diff, map: mapChoice });
+  game = new Game({ difficulty: diff, map: mapChoice, fog: fogChoice });
   endShown = false;
   soundReset(); sfx('select');   // also unlocks WebAudio, which needs a user gesture
   sel = []; placing = null; cmdMode = null; paused = false; speed = 1; zoom = 1; cmdSig = '';

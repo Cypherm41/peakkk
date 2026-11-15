@@ -48,6 +48,8 @@ class Game {
     const mapIdx = Math.max(0, MAP_KEYS.indexOf(opts.map || 'lake'));
     this.map = MAP_KEYS[mapIdx];
     _X.g_set_map(mapIdx);
+    this.fogOn = opts.fog !== false;       // fog of war is on unless a caller (tests, bots) asks for the full view
+    _X.g_set_fog(this.fogOn ? 1 : 0);
     _X.g_init(seed >>> 0, diffIdx, mask);
 
     this.units = []; this.buildings = []; this.nodes = []; this.projectiles = []; this.effects = []; this.events = [];
@@ -56,6 +58,7 @@ class Game {
     this.terrain = new Uint8Array(_mem.buffer, _X.g_terrain(), MAP_W * MAP_H);
     this.lake = new Uint8Array(_mem.buffer, _X.g_lake(), MAP_W * MAP_H);
     this.shade = new Uint8Array(_mem.buffer, _X.g_shade(), MAP_W * MAP_H);
+    this.fog = new Uint8Array(_mem.buffer, _X.g_fog(), MAP_W * MAP_H);   // 0 unexplored, 1 explored, 2 in sight
     this.occ = new Array(MAP_W * MAP_H).fill(null);
     this._u = new Map(); this._b = new Map(); this._n = new Map();
     this.sync();

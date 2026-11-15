@@ -1598,6 +1598,43 @@ static void separate(double dt) {
   }
 }
 
+/* ------------------------------- Fog of war ------------------------------ */
+/* Team 0 (the player) only sees what its units and buildings can see. fog[] holds 0 = never seen, 1 = explored but out
+ * of sight, 2 = in sight right now. When fog is on, g_snapshot leaves out every enemy unit, building, projectile and
+ * effect that is not in sight, and nodes nobody has explored yet, so the front ends cannot draw or pick what they must
+ * not see. The AI is not restricted (it plays by the real state). Off by default; the front ends turn it on. */
+static int fogOn;
+static uint8_t fog[MAP_W * MAP_H];
+static void fogReveal(double cx, double cy, double r) {
+  int x0 = (int)(cx - r), x1 = (int)(cx + r + 1), y0 = (int)(cy - r), y1 = (int)(cy + r + 1);
+  x0 = x0 < 0 ? 0 : x0; y0 = y0 < 0 ? 0 : y0; x1 = x1 > MAP_W - 1 ? MAP_W - 1 : x1; y1 = y1 > MAP_H - 1 ? MAP_H - 1 : y1;
+  for (int y = y0; y <= y1; y++) for (int x = x0; x <= x1; x++) {
+    double dx = x + 0.5 - cx, dy = y + 0.5 - cy;
+    if (dx * dx + dy * dy <= r * r) fog[y * MAP_W + x] = 2;
+  }
+}
+static void fogUpdate(void) {
+  if (!fogOn) { for (int i = 0; i < MAP_W * MAP_H; i++) fog[i] = 2; return; }
+  for (int i = 0; i < MAP_W * MAP_H; i++) if (fog[i] == 2) fog[i] = 1;
+  for (int i = 0; i < MAXU; i++) if (units[i].id && !units[i].dead && units[i].team == 0) fogReveal(units[i].x, units[i].y, 7.0);
+  for (int i = 0; i < MAXB; i++) {
+    const Bld *b = &blds[i];
+    if (!b->id || b->dead || b->team != 0) continue;
+    fogReveal(b->x + b->w / 2.0, b->y + b->h / 2.0, !b->done ? 4.0 : 6.0 + (b->w + b->h) * 0.4 + (b->type == B_TOWER ? 3.0 : 0.0));
+  }
+}
+static int fogSees(double x, double y) {
+  int ix = (int)x, iy = (int)y;
+  if (ix < 0 || iy < 0 || ix >= MAP_W || iy >= MAP_H) return 0;
+  return fog[iy * MAP_W + ix] == 2;
+}
+static int fogSeesBld(const Bld *b) {
+  for (int j = 0; j < b->h; j++) for (int i = 0; i < b->w; i++) if (fogSees(b->x + i, b->y + j)) return 1;
+  return 0;
+}
+EXPORT("g_set_fog") void g_set_fog(int on) { fogOn = on != 0; }
+EXPORT("g_fog") uint8_t *g_fog(void) { return fog; }
+
 /* --------------------------------- Update -------------------------------- */
 
 static void freeDead(void) {
@@ -1648,6 +1685,8 @@ EXPORT("g_init") void g_init(uint32_t seed, int diff, int aiMask) {
     spawnUnitAt(tc, U_SPEARMAN);
   }
   for (int i = 0; i < 2; i++) if (aiMask & (1 << i)) aiInit(&ais[i], i, difficulty);
+  __builtin_memset(fog, 0, sizeof(fog));
+  fogUpdate();
 }
 
 /* ====================== Exported API for JavaScript ======================== */
@@ -1684,10 +1723,12 @@ static float snapP[MAXP * P_STRIDE], snapE[MAXE * E_STRIDE], snapEv[MAXEV * EV_S
 static int snapCount[6];
 
 EXPORT("g_snapshot") void g_snapshot(void) {
-  int nu = 0, nb = 0, nn = 0;
+  int nu = 0, nb = 0, nn = 0, np = 0, ne = 0;
+  fogUpdate();
   for (int i = 0; i < MAXU; i++) {
     const Unit *u = &units[i];
     if (!u->id || u->dead) continue;
+    if (fogOn && u->team != 0 && !fogSees(u->x, u->y)) continue;
     float *o = &snapU[nu++ * U_STRIDE];
     TV t; int td = 0;
     if (u->state == S_BUILD) { Bld *b = B(u->target); td = b && b->done; }
@@ -1699,6 +1740,7 @@ EXPORT("g_snapshot") void g_snapshot(void) {
   for (int i = 0; i < MAXB; i++) {
     const Bld *b = &blds[i];
     if (!b->id || b->dead) continue;
+    if (fogOn && b->team != 0 && !fogSeesBld(b)) continue;
     float *o = &snapB[nb++ * B_STRIDE];
     o[0] = b->id; o[1] = b->type; o[2] = b->team; o[3] = b->x; o[4] = b->y; o[5] = b->w; o[6] = b->h; o[7] = (float)b->hp; o[8] = (float)b->maxHp;
     o[9] = b->done; o[10] = (float)b->progress; o[11] = (float)b->qt; o[12] = b->qlen; o[13] = b->hasRally; o[14] = (float)b->rx; o[15] = (float)b->ry;
@@ -1712,15 +1754,20 @@ EXPORT("g_snapshot") void g_snapshot(void) {
   for (int i = 0; i < MAXN; i++) {
     const Node *n = &nodes[i];
     if (!n->id || n->dead) continue;
+    if (fogOn && fog[n->y * MAP_W + n->x] == 0) continue;
     float *o = &snapN[nn++ * N_STRIDE];
     o[0] = n->id; o[1] = n->type; o[2] = n->x; o[3] = n->y; o[4] = (float)n->amt; o[5] = (float)n->max;
   }
   for (int i = 0; i < nproj; i++) {
-    const Proj *p = &projs[i]; float *o = &snapP[i * P_STRIDE];
+    const Proj *p = &projs[i];
+    if (fogOn && p->ateam != 0 && !fogSees(p->sx, p->sy) && !fogSees(p->lx, p->ly)) continue;
+    float *o = &snapP[np++ * P_STRIDE];
     o[0] = (float)p->sx; o[1] = (float)p->sy; o[2] = (float)p->t; o[3] = (float)p->dur; o[4] = p->stone; o[5] = (float)p->lx; o[6] = (float)p->ly; o[7] = p->ateam;
   }
   for (int i = 0; i < neff; i++) {
-    const Eff *e = &effs[i]; float *o = &snapE[i * E_STRIDE];
+    const Eff *e = &effs[i];
+    if (fogOn && !fogSees(e->x, e->y)) continue;
+    float *o = &snapE[ne++ * E_STRIDE];
     o[0] = e->type; o[1] = (float)e->x; o[2] = (float)e->y; o[3] = (float)e->z; o[4] = (float)e->life; o[5] = (float)e->max; o[6] = e->color; o[7] = e->amt; o[8] = e->res;
   }
   for (int i = 0; i < nev; i++) {
@@ -1733,7 +1780,7 @@ EXPORT("g_snapshot") void g_snapshot(void) {
     o[4] = teams[t].popUsed; o[5] = teams[t].popCap; o[6] = teams[t].up[0]; o[7] = teams[t].up[1];
   }
   snapT[2 * T_STRIDE] = (float)game_time; snapT[2 * T_STRIDE + 1] = (float)winner;
-  snapCount[0] = nu; snapCount[1] = nb; snapCount[2] = nn; snapCount[3] = nproj; snapCount[4] = neff; snapCount[5] = nev;
+  snapCount[0] = nu; snapCount[1] = nb; snapCount[2] = nn; snapCount[3] = np; snapCount[4] = ne; snapCount[5] = nev;
   nev = 0;                                     /* events are delivered once */
 }
 EXPORT("g_snap_counts") int *g_snap_counts(void) { return snapCount; }

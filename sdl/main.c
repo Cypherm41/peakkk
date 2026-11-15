@@ -5,6 +5,7 @@
  * Options:
  *   --difficulty easy|normal|hard   difficulty of the Yellow AI (default normal)
  *   --map lake|plains|river|ponds|forest   terrain (default lake)
+ *   --no-fog                        play with the whole map visible (fog of war is on by default)
  *   --seed N                        map seed (default: random)
  *   --start                         skip the menu and start a game right away
  *   --size WxH                      initial window size (default 1280x800)
@@ -15,7 +16,7 @@
 #include "ui.h"
 
 static void usage(const char *argv0) {
-  printf("usage: %s [--difficulty easy|normal|hard] [--map lake|plains|river|ponds|forest] [--seed N] [--start] [--size WxH] [--frames N] [--shot FILE.bmp]\n", argv0);
+  printf("usage: %s [--difficulty easy|normal|hard] [--map lake|plains|river|ponds|forest] [--no-fog] [--seed N] [--start] [--size WxH] [--frames N] [--shot FILE.bmp]\n", argv0);
 }
 
 int main(int argc, char **argv) {
@@ -26,6 +27,7 @@ int main(int argc, char **argv) {
     const char *a = argv[i];
     if (!strcmp(a, "--help") || !strcmp(a, "-h")) { usage(argv[0]); return 0; }
     else if (!strcmp(a, "--start")) start = 1;
+    else if (!strcmp(a, "--no-fog")) fogChoice = 0;
     else if (!strcmp(a, "--difficulty") && i + 1 < argc) {
       const char *d = argv[++i];
       diff = !strcmp(d, "easy") ? 0 : !strcmp(d, "hard") ? 2 : 1;

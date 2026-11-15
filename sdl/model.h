@@ -55,7 +55,7 @@ static struct { float res[4]; int popUsed, popCap, upWeapons, upArmor; } mTeam[2
 static float mTime;
 static int mWinner = -1;
 
-static const uint8_t *mTerrain, *mShade;
+static const uint8_t *mTerrain, *mShade, *mFog;
 static unsigned char idKind[SIM_MAXID];          /* id -> entity kind */
 static unsigned short idIdx[SIM_MAXID];          /* id -> index into the matching array */
 static int mOcc[MAP_W * MAP_H];                  /* tile -> id of the building / resource node on it (0 = free) */
@@ -71,7 +71,7 @@ static int model_init(void) {
   return 1;
 }
 
-static void model_bind_terrain(void) { mTerrain = g_terrain(); mShade = g_shade(); }
+static void model_bind_terrain(void) { mTerrain = g_terrain(); mShade = g_shade(); mFog = g_fog(); }
 
 static void model_sync(void) {
   g_snapshot();

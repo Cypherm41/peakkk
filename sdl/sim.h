@@ -41,6 +41,8 @@ float *g_snap_effs(void);
 float *g_snap_events(void);
 float *g_snap_teams(void);
 uint8_t *g_terrain(void);
+void g_set_fog(int on);      /* 1 = fog of war for team 0 (applies to the next g_init; the snapshot then omits what team 0 cannot see) */
+uint8_t *g_fog(void);        /* per tile: 0 unexplored, 1 explored, 2 in sight (all 2 when fog is off) */
 uint8_t *g_lake(void);
 uint8_t *g_shade(void);
 int g_layout(int which);

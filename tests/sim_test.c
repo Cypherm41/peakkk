@@ -62,6 +62,46 @@ static void test_maps(void) {
   g_set_map(0);
 }
 
+static int countTeam(int team, int *ub, int *bb) {
+  int u = 0, b = 0;
+  for (int i = 0; i < MAXU; i++) if (units[i].id && !units[i].dead && units[i].team == team) u++;
+  for (int i = 0; i < MAXB; i++) if (blds[i].id && !blds[i].dead && blds[i].team == team) b++;
+  *ub = u; *bb = b; return 0;
+}
+static void test_fog(void) {
+  int eu, eb, hidden;
+  g_set_map(0); g_set_fog(1); g_init(4242, 1, 0);
+  g_snapshot();
+  countTeam(1, &eu, &eb);
+  int seenEnemy = 0, seenOwn = 0;
+  for (int i = 0; i < snapCount[0]; i++) { if ((int)snapU[i * U_STRIDE + 2] == 1) seenEnemy++; else seenOwn++; }
+  for (int i = 0; i < snapCount[1]; i++) { if ((int)snapB[i * B_STRIDE + 2] == 1) seenEnemy++; else seenOwn++; }
+  CHECK(seenEnemy == 0 && seenOwn >= 7, "fog: at the start only our own units and buildings are in the snapshot");
+  CHECK(fog[base_y[0] * MAP_W + base_x[0]] == 2 && fog[base_y[1] * MAP_W + base_x[1]] == 0, "fog: our base is visible, the enemy base is unexplored");
+  int nn = 0; for (int i = 0; i < MAXN; i++) if (nodes[i].id && !nodes[i].dead) nn++;
+  CHECK(snapCount[2] > 0 && snapCount[2] < nn, "fog: unexplored resource nodes are left out of the snapshot");
+  /* walk a unit into the enemy base: the enemy appears, and is hidden again (but stays explored) after it leaves */
+  Unit *scout = NULL; for (int i = 0; i < MAXU; i++) if (units[i].id && units[i].team == 0) { scout = &units[i]; break; }
+  double ox = scout->x, oy = scout->y;
+  scout->x = base_x[1] - 4; scout->y = base_y[1];
+  g_snapshot(); seenEnemy = 0;
+  for (int i = 0; i < snapCount[1]; i++) if ((int)snapB[i * B_STRIDE + 2] == 1) seenEnemy++;
+  for (int i = 0; i < snapCount[0]; i++) if ((int)snapU[i * U_STRIDE + 2] == 1) seenEnemy++;
+  CHECK(seenEnemy >= 1, "fog: a scout next to the enemy base sees its buildings and units");
+  scout->x = ox; scout->y = oy;
+  g_snapshot(); seenEnemy = 0;
+  for (int i = 0; i < snapCount[1]; i++) if ((int)snapB[i * B_STRIDE + 2] == 1) seenEnemy++;
+  for (int i = 0; i < snapCount[0]; i++) if ((int)snapU[i * U_STRIDE + 2] == 1) seenEnemy++;
+  CHECK(seenEnemy == 0, "fog: the enemy disappears again once the scout leaves");
+  CHECK(fog[base_y[1] * MAP_W + base_x[1] - 4] == 1, "fog: the area the scout passed stays explored");
+  /* with fog off everything is delivered and every tile counts as visible */
+  g_set_fog(0); g_init(4242, 1, 0); g_snapshot();
+  countTeam(0, &hidden, &eb); countTeam(1, &eu, &eb);
+  int tot = 0; for (int i = 0; i < MAXU; i++) if (units[i].id && !units[i].dead) tot++;
+  int allVisible = 1; for (int i = 0; i < MAP_W * MAP_H; i++) if (fog[i] != 2) allVisible = 0;
+  CHECK(snapCount[0] == tot && allVisible, "fog off: the snapshot is complete and the whole map is visible");
+}
+
 static void test_economy(void) {
   g_init(4242, 1, 0);
   Bld *tc = &blds[0];
@@ -163,6 +203,7 @@ int main(int argc, char **argv) {
   uint32_t seed = argc > 2 ? (uint32_t)atoi(argv[2]) : 12345;
   test_map();
   test_maps();
+  test_fog();
   test_economy();
   test_combat();
   run_ai_vs_ai(minutes, seed, 1);

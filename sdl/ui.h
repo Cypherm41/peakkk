@@ -499,6 +499,7 @@ static void process_events(void) {
 static void ui_start_game(int diff, unsigned seed) {
   sound_reset();
   g_set_map(mapChoice);
+  g_set_fog(fogChoice);
   g_init(seed, diff, 1 << 1);
   model_bind_terrain();
   nSel = 0; nEvQueue = 0; placingOn = 0; cmdAttackMove = 0; paused = 0; speedMul = 1; zoom = 1;
@@ -880,6 +881,7 @@ static void draw_hud(void) {
 static Rc menu_rc(void) { float w = fminf(640, W - 32), h = 740; Rc r = { (W - w) / 2, (H - h) / 2, w, h }; return r; }
 static Rc menu_diff_rc(int i) { Rc p = menu_rc(); float x0 = p.x + (p.w - (3 * 204 - 8)) / 2; Rc r = { x0 + i * 104, p.y + 150, 96, 34 }; return r; }
 static Rc menu_map_rc(int i) { Rc p = menu_rc(); float x0 = p.x + (p.w - (3 * 204 - 8)) / 2; Rc r = { x0 + (i % 3) * 204, p.y + 218 + (i / 3) * 40, 196, 32 }; return r; }
+static Rc menu_fog_rc(void) { Rc p = menu_rc(); float x0 = p.x + (p.w - (3 * 204 - 8)) / 2; Rc r = { x0 + 2 * 204, p.y + 150, 196, 34 }; return r; }
 static Rc menu_start_rc(void) { Rc p = menu_rc(); Rc r = { p.x + (p.w - 240) / 2, p.y + 356, 240, 50 }; return r; }
 
 static const char *HELP_ROWS[][2] = {
@@ -935,6 +937,7 @@ static void draw_menu(void) {
   text_wrap(p.x + 30, p.y + 78, p.w - 60, 2, 0xdfcfa3, 1, "A medieval real-time strategy game. Lead the Green kingdom against the Yellow realm.", 1);
   text(menu_map_rc(0).x, p.y + 124, 2, 0xcdbd93, 1, "Difficulty");
   for (int i = 0; i < 3; i++) { Rc r = menu_diff_rc(i); ui_button(r, DIFF_NAME[i], 2, diffChoice == i, in_rc(r, mouse.x, mouse.y)); }
+  { Rc f = menu_fog_rc(); char fl[24]; snprintf(fl, sizeof fl, "Fog of war: %s", fogChoice ? "On" : "Off"); ui_button(f, fl, 2, fogChoice, in_rc(f, mouse.x, mouse.y)); }
   text(menu_map_rc(0).x, p.y + 194, 2, 0xcdbd93, 1, "Map");
   for (int i = 0; i < MAP_COUNT; i++) { Rc r = menu_map_rc(i); ui_button(r, MAP_NAME[i], 2, mapChoice == i, in_rc(r, mouse.x, mouse.y)); }
   text_wrap(menu_map_rc(0).x, p.y + 304, p.w - 2 * (menu_map_rc(0).x - p.x), 2, 0xdfcfa3, 1, MAP_DESC[mapChoice], 1);
@@ -1016,6 +1019,7 @@ static void ui_draw(void) {
 static void overlay_click(float x, float y) {
   if (screen == SCR_MENU) {
     for (int i = 0; i < 3; i++) if (in_rc(menu_diff_rc(i), x, y)) { diffChoice = i; return; }
+    if (in_rc(menu_fog_rc(), x, y)) { fogChoice = !fogChoice; return; }
     for (int i = 0; i < MAP_COUNT; i++) if (in_rc(menu_map_rc(i), x, y)) { mapChoice = i; return; }
     if (in_rc(menu_start_rc(), x, y)) ui_start_game(diffChoice, (unsigned)time(NULL) ^ (SDL_GetTicks() * 2654435761u));
   } else if (overlayPanel == PANEL_HELP) {

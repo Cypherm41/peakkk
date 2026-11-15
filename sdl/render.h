@@ -496,6 +496,33 @@ static int entity_visible(float ix, float iy, const View *v, float pad) { return
 static void world_begin(void) { gfx_set_scale(dpr * zoom); gOX = VX / zoom - camX; gOY = VY / zoom - camY; gDetail = dpr * zoom; }
 static void screen_begin(void) { gfx_set_scale(dpr); gOX = gOY = 0; gDetail = dpr; }
 
+/* fog of war: mFog is 0 (never seen), 1 (explored) or 2 (in sight); fogA turns it into a darkness per tile, blurred over
+ * the neighbours so the edge fades softly (same as updateFogAlpha in js/ui.js) */
+static float fogA[MAP_W * MAP_H];
+static void update_fog_alpha(void) {
+  for (int y = 0; y < MAP_H; y++) for (int x = 0; x < MAP_W; x++) {
+    float sum = 0;
+    for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
+      int xx = x + dx, yy = y + dy;
+      if (xx < 0 || yy < 0 || xx >= MAP_W || yy >= MAP_H) { sum += 1; continue; }
+      int v = mFog[yy * MAP_W + xx]; sum += v == 0 ? 1.0f : v == 1 ? 0.5f : 0.0f;
+    }
+    float a = sum / 9.0f;
+    fogA[y * MAP_W + x] = mFog[y * MAP_W + x] == 0 && a < 0.92f ? 0.92f : a;
+  }
+}
+static int fog_enabled(void) { if (!mFog) return 0; for (int i = 0; i < MAP_W * MAP_H; i++) if (mFog[i] != 2) return 1; return 0; }
+static void draw_fog(const View *vis) {
+  for (int y = vis->y0; y <= vis->y1; y++) for (int x = vis->x0; x <= vis->x1; x++) {
+    float a = fogA[y * MAP_W + x];
+    if (a < 0.03f) continue;
+    float cx = isoX((float)x, (float)y), cy = isoY((float)x, (float)y);
+    if (cx < vis->l - 40 || cx > vis->r + 40 || cy < vis->t - 20 || cy > vis->b + 20) continue;
+    float p[8] = { cx, cy - 1.6f, cx + 34, cy + 16, cx, cy + 34, cx - 34, cy + 16 };
+    fill_poly(p, 4, 0x080c09, a);
+  }
+}
+
 static void render_world(int mouseX, int mouseY, int dragging, float dragX, float dragY) {
   world_begin();
   View vis;
@@ -512,6 +539,8 @@ static void render_world(int mouseX, int mouseY, int dragging, float dragX, floa
   vis.x0 = (int)fmaxf(0, floorf(minx) - 1); vis.x1 = (int)fminf(MAP_W - 1, ceilf(maxx) + 1);
   vis.y0 = (int)fmaxf(0, floorf(miny) - 1); vis.y1 = (int)fminf(MAP_H - 1, ceilf(maxy) + 1);
 
+  int fogDraw = fog_enabled();
+  if (fogDraw) update_fog_alpha();
   draw_terrain(&vis);
 
   /* selection footprints and the rally line, on the ground */
@@ -587,6 +616,8 @@ static void render_world(int mouseX, int mouseY, int dragging, float dragX, floa
   if (hoverId && !sel_has(hoverId)) draw_hover(hoverId);
   for (int i = 0; i < nProjs; i++) draw_projectile(&mProjs[i]);
   for (int i = 0; i < nEffs; i++) draw_effect(&mEffs[i]);
+
+  if (fogDraw) draw_fog(&vis);
 
   /* health bars */
   for (int i = 0; i < ni; i++) {
@@ -676,6 +707,16 @@ static void draw_minimap(float ox, float oy) {
     const FUnit *u = &mUnits[i];
     float px, py; mini_pt(u->x, u->y, &px, &py);
     fill_rect(px - 1, py - 1, 2.2f, 2.2f, TEAM_COLOR[u->team], 1);
+  }
+  if (fog_enabled()) {
+    for (int y = 0; y < MAP_H; y++) for (int x = 0; x < MAP_W; x++) {
+      float a = fogA[y * MAP_W + x];
+      if (a < 0.03f) continue;
+      float ax, ay, bx, by, dx, dy, ex, ey;
+      mini_pt((float)x, (float)y, &ax, &ay); mini_pt(x + 1.0f, (float)y, &bx, &by); mini_pt(x + 1.0f, y + 1.0f, &dx, &dy); mini_pt((float)x, y + 1.0f, &ex, &ey);
+      float p[8] = { ax, ay - 0.5f, bx + 0.6f, by, dx, dy + 0.6f, ex - 0.6f, ey };
+      fill_poly(p, 4, 0x080c09, a);
+    }
   }
   for (int i = 0; i < nPings; i++) {
     float px, py; mini_pt(pings[i].x, pings[i].y, &px, &py);

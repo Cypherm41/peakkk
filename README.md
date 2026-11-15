@@ -16,6 +16,7 @@ Press **F1** in game for the full controls.
 - **Units:** Builder, Swordsman, Spearman, Archer, Cavalry and Warship (built at the Port, fights on the central lake).
 - **Counters:** swordsmen beat spearmen, spearmen beat cavalry, cavalry beat archers, archers beat swordsmen.
 - **Upgrades:** the Blacksmith researches weapon and armor levels.
+- **Fog of war:** on by default (toggle in the main menu, or `--no-fog` for the SDL binary). You only see what your units and buildings can see; explored ground stays dimly visible, enemies and unexplored resources vanish from view. The simulation filters the snapshot itself (`g_set_fog`, `g_fog`), so neither front end can draw or pick what it should not see. The enemy AI is not restricted.
 - **Maps:** pick one in the main menu (web and SDL). *Central Lake* is the classic; *Open Plains* has no water and few trees; *Twin Fords* is a winding river with three crossings; *Pond Country* scatters small ponds (Ports work on any water); *Deep Forest* fills the map with woods and leaves a road between the bases. Each seed generates a different layout, and every map is checked for a land route between the bases and for enough resources.
 - **Enemy AI:** three difficulties (Easy, Normal, Hard). It builds an economy, expands its base, researches upgrades and sends growing attack waves.
 
