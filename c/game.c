@@ -83,7 +83,7 @@ typedef struct {
   int id, type, team, dead, state, sub;
   int target;                       /* entity id (unit / building / node), 0 = none */
   double x, y, hp, maxHp, tx, ty, cd, atkAnim, anim, scan, repath, carry;
-  int face, moving, working, carryType, gatherKind, lastKind, farm, drop, autoAtk, partial, ptx, pty, wave;
+  int face, moving, working, carryType, gatherKind, lastKind, farm, drop, autoAtk, partial, ptx, pty, wave, raid;
   double homeX, homeY; int hasHome;
   int haspath, pi, plen; float px[MAXPATH], py[MAXPATH];
   int ign_id[6]; double ign_t[6]; int ign_n;
@@ -119,6 +119,7 @@ typedef struct {                    /* uniform view of any entity, used for targ
 typedef struct {
   int active, team; int diff;
   double t, next; int waveSize, waveId, waveStart, attacking; double portTry;
+  int raidOn; double raidUntil, raidNext;    /* cavalry raids on the enemy's workers */
   int hasRally; double rx, ry;
 } AI;
 
@@ -1340,10 +1341,23 @@ static double aiPickTarget(const AI *ai, double fx, double fy, double *ox, doubl
   return found;
 }
 
+/* nearest enemy builder to (fx, fy): what a raid hunts */
+static int aiNearestPrey(int team, double fx, double fy, double *ox, double *oy) {
+  int found = 0; double bd = 1e9;
+  for (int i = 0; i < MAXU; i++) {
+    const Unit *u = &units[i];
+    if (!u->id || u->dead || u->team == team || u->type != U_BUILDER) continue;
+    double d = d_hypot(fx - u->x, fy - u->y);
+    if (d < bd) { bd = d; *ox = u->x; *oy = u->y; found = 1; }
+  }
+  return found;
+}
+
 static void aiThink(AI *ai) {
   const DiffDef *df = &DIFFD[ai->diff];
   int id = ai->team; Team *team = &teams[id]; double *R = team->res;
-  static Unit *builders[MAXU], *army[MAXU], *ships[MAXU];
+  static Unit *builders[MAXU], *army[MAXU], *ships[MAXU], *raiders[MAXU];
+  int nR = 0, nArcher = 0, nCav = 0;
   static Bld *myB[MAXB];
   int nB = 0, nbld = 0, nA = 0, nS = 0;
   int nbType[NUM_BLD] = {0}, ndType[NUM_BLD] = {0};
@@ -1366,7 +1380,11 @@ static void aiThink(AI *ai) {
     Unit *u = &units[i];
     if (!u->id || u->dead || u->team != id) continue;
     if (u->type == U_BUILDER) builders[nB++] = u;
-    else if (UDEF[u->type].soldier && !UDEF[u->type].water) { army[nA++] = u; if (u->type == U_SWORDSMAN) nSword++; if (u->type == U_SPEARMAN) nSpear++; }
+    else if (u->raid && UDEF[u->type].soldier) raiders[nR++] = u;
+    else if (UDEF[u->type].soldier && !UDEF[u->type].water) {
+      army[nA++] = u;
+      switch (u->type) { case U_SWORDSMAN: nSword++; break; case U_SPEARMAN: nSpear++; break; case U_ARCHER: nArcher++; break; case U_CAVALRY: nCav++; break; default: break; }
+    }
     if (u->type == U_WARSHIP) ships[nS++] = u;
   }
   Bld *baseB = tc ? tc : myB[0];
@@ -1436,6 +1454,7 @@ static void aiThink(AI *ai) {
   if (!nbType[B_TOWNCENTER] && R[R_WOOD] >= 300 && R[R_STONE] >= 200) aiTryBuild(ai, B_TOWNCENTER, bcx, bcy, 5, 14, 1, builders, nB);
 
   /* build order */
+  int saveFor = -1;                                    /* building the AI is saving resources for */
   if (buildingNow < 2) {
     struct { int type; int cond; } want[8] = {
       { B_BARRACKS,   nB >= 6 && nbType[B_BARRACKS] < 1 },
@@ -1449,6 +1468,7 @@ static void aiThink(AI *ai) {
     };
     for (int i = 0; i < 8; i++) {
       if (!want[i].cond) continue;
+      if (ai->diff >= 1 && !canAfford(R, BDEF[want[i].type].cost)) { saveFor = want[i].type; break; }   /* save up instead of spending it on units */
       int ok;
       if (want[i].type == B_TOWER) ok = aiTryBuild(ai, B_TOWER, bcx + dirX * 7, bcy, 0, 6, 1, builders, nB);
       else ok = aiTryBuild(ai, want[i].type, bcx, bcy, 6, 15, 1, builders, nB);
@@ -1460,15 +1480,31 @@ static void aiThink(AI *ai) {
     if (canAfford(R, BDEF[B_PORT].cost)) aiTryBuild(ai, B_PORT, bcx, bcy, 4, 34, 1, builders, nB);
   }
 
+  /* what the enemy fields (the AI plays on the real state): used to pick counters on Normal and Hard */
+  int eCav = 0, eArcher = 0, eSpear = 0, eSold = 0;
+  for (int i = 0; i < MAXU; i++) {
+    const Unit *e = &units[i];
+    if (!e->id || e->dead || e->team == id || !UDEF[e->type].soldier || UDEF[e->type].water) continue;
+    eSold++;
+    if (e->type == U_CAVALRY) eCav++; else if (e->type == U_ARCHER) eArcher++; else if (e->type == U_SPEARMAN) eSpear++;
+  }
+  int counter = ai->diff >= 1 && eSold >= 6;
+
   /* training */
   for (int i = 0; i < nbld; i++) {
     Bld *b = myB[i];
     if (!b->done || b->type == B_TOWNCENTER || BDEF[b->type].trains[0] < 0 || b->qlen >= 2) continue;
     int type = -1;
-    if (b->type == B_BARRACKS) type = nSword <= nSpear ? U_SWORDSMAN : U_SPEARMAN;
-    else if (b->type == B_ARCHERY) type = U_ARCHER;
-    else if (b->type == B_STABLE) type = U_CAVALRY;
+    if (b->type == B_BARRACKS) {
+      type = nSword <= nSpear ? U_SWORDSMAN : U_SPEARMAN;
+      if (counter) { if (eCav * 3 >= eSold) type = U_SPEARMAN; else if (eSpear * 2 >= eSold) type = U_SWORDSMAN; }   /* spears stop cavalry, swords beat spears */
+    }
+    else if (b->type == B_ARCHERY) { type = U_ARCHER; if (counter && eCav * 2 >= eSold && nArcher >= 4) type = -1; }  /* no more archers into a cavalry army */
+    else if (b->type == B_STABLE) { type = U_CAVALRY; if (counter && eSpear * 2 >= eSold && nCav >= 3) type = -1; }  /* nor cavalry into spears */
     else if (b->type == B_PORT) { if (nS + b->qlen < (id == 1 ? 3 : 2)) type = U_WARSHIP; }
+    if (type >= 0 && saveFor >= 0 && nA >= 12) {                       /* leave enough of what the planned building needs */
+      for (int k = 0; k < 4; k++) if (BDEF[saveFor].cost[k] > 0 && UDEF[type].cost[k] > 0 && R[k] < BDEF[saveFor].cost[k] + UDEF[type].cost[k]) { type = -1; break; }
+    }
     if (type >= 0) queueUnit(b, type);
     b->hasRally = 1; b->rx = ai->rx; b->ry = ai->ry; b->rtarget = 0;
   }
@@ -1510,7 +1546,11 @@ static void aiThink(AI *ai) {
   if (!ai->attacking && nA >= ai->waveSize && haveTarget) {
     ai->attacking = 1; ai->waveId++; ai->waveStart = nA;
     int n = 0;
-    for (int i = 0; i < nA && n < MAXORD; i++) { army[i]->wave = ai->waveId; ids[n++] = army[i]->id; }
+    int reserve = (ai->diff >= 1 && !ai->raidOn) ? 3 : 0;          /* the first few cavalry stay home as the raiding party */
+    for (int i = 0; i < nA && n < MAXORD; i++) {
+      if (reserve > 0 && army[i]->type == U_CAVALRY) { reserve--; continue; }
+      army[i]->wave = ai->waveId; ids[n++] = army[i]->id;
+    }
     orderMove(ids, n, tx, ty, 1);
     pushEvent(EV_MARCH, 0, 0, 0, 0, 0);
   } else if (ai->attacking) {
@@ -1521,6 +1561,38 @@ static void aiThink(AI *ai) {
       orderMove(ids, n, ai->rx, ai->ry, 0);
     } else {
       for (int i = 0; i < n; i++) { Unit *u = U(ids[i]); if (u && u->state == S_IDLE) { int one[1] = { ids[i] }; orderMove(one, 1, tx, ty, 1); } }
+    }
+  }
+  /* raids (Normal and Hard): a few spare cavalry hunt the enemy's builders while the main army masses; they come home
+   * when the base is threatened, when they have lost too many, or after a while */
+  if (ai->diff >= 1) {
+    int need = 3;
+    if (ai->raidOn) {
+      int hurt = 0;
+      for (int i = 0; i < nR; i++) if (raiders[i]->hp < raiders[i]->maxHp * 0.4) hurt++;
+      double px, py;
+      int n = 0; for (int i = 0; i < nR && n < MAXORD; i++) ids[n++] = raiders[i]->id;
+      int prey = nR >= 2 && aiNearestPrey(id, raiders[0]->x, raiders[0]->y, &px, &py);
+      if (threat || ai->t > ai->raidUntil || nR < 2 || hurt * 2 > nR || !prey) {
+        for (int i = 0; i < nR; i++) raiders[i]->raid = 0;
+        if (n) { if (threat) orderMove(ids, n, thx, thy, 1); else orderMove(ids, n, ai->rx, ai->ry, 0); }
+        ai->raidOn = 0; ai->raidNext = ai->t + 45;
+      } else {
+        for (int i = 0; i < nR; i++) if (raiders[i]->state == S_IDLE) { int one[1] = { raiders[i]->id }; orderMove(one, 1, px, py, 1); }
+      }
+    } else if (!threat && bt > (ai->diff == 2 ? 150 : 220) && ai->t > ai->raidNext) {
+      int n = 0;
+      for (int i = 0; i < nA && n < need + 1; i++) {
+        Unit *u = army[i];
+        if (u->type == U_CAVALRY && u->wave != ai->waveId && u->state == S_IDLE) ids[n++] = u->id;
+        else if (u->type == U_CAVALRY && !ai->attacking && u->state == S_IDLE) ids[n++] = u->id;
+      }
+      double px, py;
+      if (n >= need && aiNearestPrey(id, bcx, bcy, &px, &py)) {
+        for (int i = 0; i < n; i++) { Unit *u = U(ids[i]); if (u) u->raid = 1; }
+        orderMove(ids, n, px, py, 1);
+        ai->raidOn = 1; ai->raidUntil = ai->t + 70;
+      }
     }
   }
   if (nS >= 2 && haveTarget) {
