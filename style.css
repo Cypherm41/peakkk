@@ -100,3 +100,9 @@ button.big:hover { filter: brightness(1.1); }
 }
 #mapdesc { font-size: 14px; min-height: 2.6em; margin: -6px 0 14px; }
 .map { padding: 7px 9px; font-size: 14px; }
+#endstats { border-collapse: collapse; margin: 6px auto 18px; font-size: 15px; }
+#endstats th, #endstats td { padding: 4px 14px; text-align: right; }
+#endstats th:first-child, #endstats td:first-child { text-align: left; color: #cdbd93; }
+#endstats th { color: #e6d9b0; border-bottom: 1px solid #5a4d33; }
+#endstats td.win { color: #9af0a6; font-weight: bold; }
+#btn-continue { margin-top: 10px; }

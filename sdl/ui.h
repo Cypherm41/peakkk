@@ -14,6 +14,7 @@
 
 #include <time.h>
 #include "render.h"
+#include "save.h"
 
 typedef struct { float x, y, w, h; } Rc;
 static int in_rc(Rc r, float px, float py) { return px >= r.x && px < r.x + r.w && py >= r.y && py < r.y + r.h; }
@@ -496,11 +497,56 @@ static void process_events(void) {
 
 /* ------------------------------ starting a game ------------------------------ */
 
-static void ui_start_game(int diff, unsigned seed) {
+/* ---------------------------------- save / load ---------------------------------- */
+
+static int haveSave;
+static Uint32 saveCheckTick;
+static const char *save_path(void) {
+  static char path[1100];
+  const char *env = getenv("PEAKKK_SAVE");                 /* tests and scripts can point the save somewhere else */
+  if (env && *env) { snprintf(path, sizeof path, "%s", env); return path; }
+  if (!path[0]) { char *pref = SDL_GetPrefPath("peakkk", "banners"); snprintf(path, sizeof path, "%speakkk.sav", pref ? pref : "./"); if (pref) SDL_free(pref); }
+  return path;
+}
+static int save_exists(void) { FILE *f = fopen(save_path(), "rb"); if (!f) return 0; fclose(f); return 1; }
+
+static int ui_save_game(void) {
+  if (!inGame || mWinner >= 0) { toast(0, "This game is over - nothing to save"); return 0; }
+  int n = g_save_size();
+  const uint8_t *raw = g_save();
+  uint8_t *enc = malloc((size_t)n * 2 + 16);
+  if (!enc) return 0;
+  int len = rle_encode(raw, n, enc);
+  FILE *f = fopen(save_path(), "wb");
+  int ok = f && fwrite("PKSV", 1, 4, f) == 4 && fwrite(&n, sizeof n, 1, f) == 1 && fwrite(enc, 1, (size_t)len, f) == (size_t)len;
+  if (f && fclose(f) != 0) ok = 0;
+  free(enc);
+  if (ok) { haveSave = 1; sfx(SFX_SELECT); toast(0, "Game saved (%d:%02d)", (int)mTime / 60, (int)mTime % 60); }
+  else { sfx(SFX_ERR); toast(0, "Could not write the save file"); }
+  return ok;
+}
+
+static void ui_enter_game(const char *message);
+static int ui_load_game(void) {
+  FILE *f = fopen(save_path(), "rb");
+  if (!f) { sfx(SFX_ERR); toast(0, "No saved game yet (F5 saves)"); return 0; }
+  char magic[4]; int raw = 0;
+  fseek(f, 0, SEEK_END); long size = ftell(f); fseek(f, 0, SEEK_SET);
+  uint8_t *enc = size > 12 && size < (1 << 26) ? malloc((size_t)size) : NULL;
+  int ok = enc && fread(magic, 1, 4, f) == 4 && !memcmp(magic, "PKSV", 4) && fread(&raw, sizeof raw, 1, f) == 1 && raw == g_save_size();
+  int elen = ok ? (int)fread(enc, 1, (size_t)size - 8, f) : 0;
+  fclose(f);
+  if (ok) ok = rle_decode(enc, elen, g_load_buf(), raw) == raw;      /* decoded straight into the core's load buffer */
+  free(enc);
+  if (!ok || !g_load(raw)) { sfx(SFX_ERR); toast(0, "Could not load that save (damaged or from another version)"); return 0; }
+  diffChoice = g_get_diff(); mapChoice = g_get_map(); fogChoice = g_get_fog();
+  ui_enter_game("Game loaded");
+  return 1;
+}
+
+/* everything that happens after the core holds a fresh or restored game */
+static void ui_enter_game(const char *message) {
   sound_reset();
-  g_set_map(mapChoice);
-  g_set_fog(fogChoice);
-  g_init(seed, diff, 1 << 1);
   model_bind_terrain();
   nSel = 0; nEvQueue = 0; placingOn = 0; cmdAttackMove = 0; paused = 0; speedMul = 1; zoom = 1;
   nPings = 0; nClickFx = 0; nToasts = 0; idleIdx = 0; endShown = 0; hoverId = 0;
@@ -508,13 +554,22 @@ static void ui_start_game(int diff, unsigned seed) {
   mouse.down = mouse.mid = mouse.drag = mouse.onMini = 0;
   model_sync();
   build_mini_terrain();
+  int found = 0;
   for (int i = 0; i < nBlds; i++) if (mBlds[i].team == 0 && mBlds[i].type == B_TOWNCENTER) {
-    centerCam(mBlds[i].x + 1.5f, mBlds[i].y + 1.5f); sel_one(mBlds[i].id); break;
+    centerCam(mBlds[i].x + 1.5f, mBlds[i].y + 1.5f); sel_one(mBlds[i].id); found = 1; break;
   }
+  if (!found) centerCam(MAP_W / 2.0f, MAP_H / 2.0f);
   inGame = 1; screen = SCR_PLAY; overlayPanel = PANEL_NONE;
-  diffChoice = diff;
   set_mode(0);
-  toast(0, "Train builders at your Town Center, then put them to work!");
+  toast(0, "%s", message);
+}
+
+static void ui_start_game(int diff, unsigned seed) {
+  g_set_map(mapChoice);
+  g_set_fog(fogChoice);
+  g_init(seed, diff, 1 << 1);
+  diffChoice = diff;
+  ui_enter_game("Train builders at your Town Center, then put them to work!");
   diffToastTimer = 1.2f;
 }
 
@@ -882,7 +937,8 @@ static Rc menu_rc(void) { float w = fminf(640, W - 32), h = 740; Rc r = { (W - w
 static Rc menu_diff_rc(int i) { Rc p = menu_rc(); float x0 = p.x + (p.w - (3 * 204 - 8)) / 2; Rc r = { x0 + i * 104, p.y + 150, 96, 34 }; return r; }
 static Rc menu_map_rc(int i) { Rc p = menu_rc(); float x0 = p.x + (p.w - (3 * 204 - 8)) / 2; Rc r = { x0 + (i % 3) * 204, p.y + 218 + (i / 3) * 40, 196, 32 }; return r; }
 static Rc menu_fog_rc(void) { Rc p = menu_rc(); float x0 = p.x + (p.w - (3 * 204 - 8)) / 2; Rc r = { x0 + 2 * 204, p.y + 150, 196, 34 }; return r; }
-static Rc menu_start_rc(void) { Rc p = menu_rc(); Rc r = { p.x + (p.w - 240) / 2, p.y + 356, 240, 50 }; return r; }
+static Rc menu_start_rc(void) { Rc p = menu_rc(); float tot = haveSave ? 496 : 240; Rc r = { p.x + (p.w - tot) / 2, p.y + 356, 240, 50 }; return r; }
+static Rc menu_load_rc(void) { Rc p = menu_rc(); Rc r = { p.x + (p.w - 496) / 2 + 256, p.y + 356, 240, 50 }; return r; }
 
 static const char *HELP_ROWS[][2] = {
   { "Left click / drag", "Select units or buildings (double click: all of a type on screen)" },
@@ -897,6 +953,7 @@ static const char *HELP_ROWS[][2] = {
   { ". (period)", "Select next idle builder" },
   { "Space", "Jump to selection (or Town Center)" },
   { "P, Esc, M, N", "Pause, cancel placement / deselect, sound on / off, music on / off" },
+  { "F5, F9", "Save the game, load the saved game" },
   { "F1, F11", "This help, fullscreen on / off" },
 };
 #define HELP_N ((int)(sizeof HELP_ROWS / sizeof HELP_ROWS[0]))
@@ -915,7 +972,7 @@ static Rc help_close_rc(void) {
   return r;
 }
 
-static Rc end_rc(void) { float w = fminf(560, W - 32), h = 270; Rc r = { (W - w) / 2, (H - h) / 2, w, h }; return r; }
+static Rc end_rc(void) { float w = fminf(560, W - 32), h = 540; Rc r = { (W - w) / 2, (H - h) / 2, w, h }; return r; }
 static Rc end_again_rc(void) { Rc p = end_rc(); Rc r = { p.x + (p.w - 240) / 2, p.y + p.h - 76, 240, 50 }; return r; }
 
 static void draw_panel_frame(Rc p) {
@@ -941,7 +998,9 @@ static void draw_menu(void) {
   text(menu_map_rc(0).x, p.y + 194, 2, 0xcdbd93, 1, "Map");
   for (int i = 0; i < MAP_COUNT; i++) { Rc r = menu_map_rc(i); ui_button(r, MAP_NAME[i], 2, mapChoice == i, in_rc(r, mouse.x, mouse.y)); }
   text_wrap(menu_map_rc(0).x, p.y + 304, p.w - 2 * (menu_map_rc(0).x - p.x), 2, 0xdfcfa3, 1, MAP_DESC[mapChoice], 1);
+  if (SDL_GetTicks() - saveCheckTick > 1000 || !saveCheckTick) { saveCheckTick = SDL_GetTicks() | 1; haveSave = save_exists(); }
   Rc s = menu_start_rc(); big_button(s, "Start Game", in_rc(s, mouse.x, mouse.y));
+  if (haveSave) { Rc l = menu_load_rc(); big_button(l, "Load Game", in_rc(l, mouse.x, mouse.y)); }
   static const char *tips[4] = {
     "Train builders at the Town Center and put them to work: chop trees, build farms, mine gold and stone.",
     "Build houses before you hit the population cap, and storehouses next to forests and mines.",
@@ -983,6 +1042,22 @@ static void draw_end(void) {
   if (won) snprintf(buf, sizeof buf, "The Yellow realm has fallen. Your Green banners fly victorious after %dm %ds.", s / 60, s % 60);
   else snprintf(buf, sizeof buf, "Your last building has fallen after %dm %ds. The Yellow realm prevails.", s / 60, s % 60);
   text_wrap(p.x + 30, p.y + 96, p.w - 60, 2, 0xdfcfa3, 1, buf, 1);
+  /* game statistics, You against Yellow */
+  static const char *LABEL[] = { "Units trained", "Enemy units killed", "Units lost", "Buildings built", "Buildings destroyed",
+                                 "Food gathered", "Wood gathered", "Gold gathered", "Stone gathered" };
+  static const int ROW[] = { 0, 1, 2, 5, 3, 6, 7, 8, 9 };                /* index into the core's counters */
+  const int *st = g_stats(); int n = g_stat_count();
+  float cx1 = p.x + p.w - 200, cx2 = p.x + p.w - 56, ty = p.y + 170;
+  { const char *h1 = "You", *h2 = "Yellow"; text(cx1 - text_width(h1, 2), ty, 2, 0x9af0a6, 1, h1); text(cx2 - text_width(h2, 2), ty, 2, 0xf0d56a, 1, h2); }
+  fill_rect(p.x + 40, ty + 20, p.w - 80, 1, 0xffffff, 0.2f);
+  for (int i = 0; i < 9; i++) {
+    float y = ty + 30 + i * 26;
+    int a = st[ROW[i]], b = st[n + ROW[i]], good = ROW[i] == 2 ? a < b : a > b;
+    char na[24], nb[24]; snprintf(na, sizeof na, "%d", a); snprintf(nb, sizeof nb, "%d", b);
+    text(p.x + 50, y, 2, 0xcdbd93, 1, LABEL[i]);
+    text(cx1 - text_width(na, 2), y, 2, good ? 0x9af0a6 : 0xe6dcc0, 1, na);
+    text(cx2 - text_width(nb, 2), y, 2, 0xe6dcc0, 1, nb);
+  }
   Rc a = end_again_rc(); big_button(a, "Play Again", in_rc(a, mouse.x, mouse.y));
 }
 
@@ -1021,6 +1096,7 @@ static void overlay_click(float x, float y) {
     for (int i = 0; i < 3; i++) if (in_rc(menu_diff_rc(i), x, y)) { diffChoice = i; return; }
     if (in_rc(menu_fog_rc(), x, y)) { fogChoice = !fogChoice; return; }
     for (int i = 0; i < MAP_COUNT; i++) if (in_rc(menu_map_rc(i), x, y)) { mapChoice = i; return; }
+    if (haveSave && in_rc(menu_load_rc(), x, y)) { ui_load_game(); return; }
     if (in_rc(menu_start_rc(), x, y)) ui_start_game(diffChoice, (unsigned)time(NULL) ^ (SDL_GetTicks() * 2654435761u));
   } else if (overlayPanel == PANEL_HELP) {
     if (in_rc(help_close_rc(), x, y)) overlayPanel = PANEL_NONE;
@@ -1093,6 +1169,8 @@ static void on_key(SDL_Scancode sc, int mod) {
     SDL_SetWindowFullscreen(gWin, fs ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP);
     return;
   }
+  if (sc == SDL_SCANCODE_F9) { ui_load_game(); return; }
+  if (sc == SDL_SCANCODE_F5) { if (inGame && screen == SCR_PLAY && !overlay_open()) ui_save_game(); return; }
   if (sc == SDL_SCANCODE_F1) {
     if (screen != SCR_PLAY) return;
     overlayPanel = overlayPanel == PANEL_HELP ? PANEL_NONE : overlayPanel == PANEL_NONE ? PANEL_HELP : overlayPanel;

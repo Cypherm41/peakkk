@@ -40,17 +40,24 @@ const ERROR_TEXT = {
 class Game {
   constructor(opts = {}) {
     if (!_X) throw new Error('Game core is not loaded yet (await gameReady first)');
-    const diffIdx = Math.max(0, DIFF_KEYS.indexOf(opts.difficulty || 'normal'));
-    const seed = opts.seed != null ? opts.seed : (Math.random() * 4294967296) >>> 0;
-    const aiTeams = opts.aiTeams || [1];
-    let mask = 0; for (const t of aiTeams) mask |= 1 << t;
-    this.seed = seed; this.difficulty = DIFF_KEYS[diffIdx];
-    const mapIdx = Math.max(0, MAP_KEYS.indexOf(opts.map || 'lake'));
-    this.map = MAP_KEYS[mapIdx];
-    _X.g_set_map(mapIdx);
-    this.fogOn = opts.fog !== false;       // fog of war is on unless a caller (tests, bots) asks for the full view
-    _X.g_set_fog(this.fogOn ? 1 : 0);
-    _X.g_init(seed >>> 0, diffIdx, mask);
+    let diffIdx, mapIdx, seed = null;
+    if (opts.save) {                       // continue a saved game (bytes from save())
+      if (opts.save.length !== _X.g_save_size()) throw new Error('This save is from an incompatible version.');
+      new Uint8Array(_mem.buffer, _X.g_load_buf(), opts.save.length).set(opts.save);
+      if (!_X.g_load(opts.save.length)) throw new Error('This save is from an incompatible version.');
+      diffIdx = _X.g_get_diff(); mapIdx = _X.g_get_map(); this.fogOn = !!_X.g_get_fog();
+    } else {
+      diffIdx = Math.max(0, DIFF_KEYS.indexOf(opts.difficulty || 'normal'));
+      seed = opts.seed != null ? opts.seed : (Math.random() * 4294967296) >>> 0;
+      const aiTeams = opts.aiTeams || [1];
+      let mask = 0; for (const t of aiTeams) mask |= 1 << t;
+      mapIdx = Math.max(0, MAP_KEYS.indexOf(opts.map || 'lake'));
+      _X.g_set_map(mapIdx);
+      this.fogOn = opts.fog !== false;       // fog of war is on unless a caller (tests, bots) asks for the full view
+      _X.g_set_fog(this.fogOn ? 1 : 0);
+      _X.g_init(seed >>> 0, diffIdx, mask);
+    }
+    this.seed = seed; this.difficulty = DIFF_KEYS[diffIdx]; this.map = MAP_KEYS[mapIdx];
 
     this.units = []; this.buildings = []; this.nodes = []; this.projectiles = []; this.effects = []; this.events = [];
     this.time = 0; this.winner = null;
@@ -65,6 +72,14 @@ class Game {
   }
 
   update(dt) { _X.g_update(dt); }
+
+  /* The whole game as bytes (about 1.4 MB, mostly zeros: see rleEncode in ui.js), and the end-of-game counters. */
+  save() { return new Uint8Array(_mem.buffer, _X.g_save(), _X.g_save_size()).slice(); }
+  stats() {   // [team 0, team 1] -> { trained, kills, lost, bkills, blost, built, food, wood, gold, stone }
+    const n = _X.g_stat_count(), a = new Int32Array(_mem.buffer, _X.g_stats(), 2 * n);
+    const keys = ['trained', 'kills', 'lost', 'bkills', 'blost', 'built', 'food', 'wood', 'gold', 'stone'];
+    return [0, 1].map((t) => Object.fromEntries(keys.map((k, i) => [k, a[t * n + i]])));
+  }
 
   /* Copy the C state into JS objects. Call after update() calls and after any command. */
   sync() {

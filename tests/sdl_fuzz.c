@@ -19,6 +19,7 @@ static const SDL_Scancode KEYS[] = {
   SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_3, SDL_SCANCODE_9, SDL_SCANCODE_TAB };
 
 int main(int argc, char **argv) {
+  setenv("PEAKKK_SAVE", "/tmp/peakkk_fuzz.sav", 1);        /* random F5 / F9 presses must not touch the real save */
   int events = argc > 1 ? atoi(argv[1]) : 30000;
   rs = 88172645463325252ull ^ ((unsigned long long)(argc > 2 ? atoi(argv[2]) : 1) * 0x9E3779B97F4A7C15ull);
   SDL_setenv("SDL_VIDEODRIVER", "dummy", 0); SDL_setenv("SDL_AUDIODRIVER", "dummy", 0);

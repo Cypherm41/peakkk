@@ -18,6 +18,8 @@
     <div class="spacer"></div>
     <button id="btn-idle" class="tb" title="Select an idle builder (.)">👷 Idle <b id="idle-count">0</b></button>
     <button id="btn-speed" class="tb" title="Game speed">⏩ 1x</button>
+    <button id="btn-save" class="tb" title="Save game (F5)">💾</button>
+    <button id="btn-load" class="tb" title="Load saved game (F9)">📂</button>
     <button id="btn-pause" class="tb" title="Pause (P)">⏸</button>
     <button id="btn-help" class="tb" title="Controls (F1)">?</button>
     <div id="clock">0:00</div>
@@ -54,6 +56,7 @@
       <p class="sub" id="mapdesc"></p>
       <div class="row"><span>Fog of war</span><button id="fogbtn" class="opt sel">On</button></div>
       <button id="btn-start" class="big">Start Game</button>
+      <button id="btn-continue" class="big hidden"></button>
       <ul class="tips">
         <li>Train <b>builders</b> at the Town Center and put them to work: chop trees, build farms, mine gold and stone.</li>
         <li>Build <b>houses</b> before you hit the population cap, and <b>storehouses</b> next to forests and mines.</li>
@@ -64,6 +67,7 @@
     <div class="panel hidden" id="endpanel">
       <h1 id="endtitle">Victory!</h1>
       <p class="sub" id="endsub"></p>
+      <table id="endstats"></table>
       <button id="btn-again" class="big">Play Again</button>
     </div>
     <div class="panel hidden" id="helppanel">
@@ -82,6 +86,7 @@
         <tr><td>Space</td><td>Jump to selection (or Town Center)</td></tr>
         <tr><td>P · Esc</td><td>Pause · cancel placement / deselect</td></tr>
         <tr><td>M · N</td><td>Sound on / off · music on / off</td></tr>
+        <tr><td>F5 · F9</td><td>Save game · load the saved game</td></tr>
       </table>
       <button id="btn-closehelp" class="big">Close</button>
     </div>

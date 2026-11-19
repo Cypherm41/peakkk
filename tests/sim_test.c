@@ -113,6 +113,45 @@ static void test_fog(void) {
   CHECK(snapCount[0] == tot && allVisible, "fog off: the snapshot is complete and the whole map is visible");
 }
 
+static unsigned long long digest(void) {
+  unsigned long long h = 1469598103934665603ull;
+#define MIX(v) do { double d_ = (double)(v); unsigned char *b_ = (unsigned char *)&d_; for (int k_ = 0; k_ < 8; k_++) h = (h ^ b_[k_]) * 1099511628211ull; } while (0)
+  for (int i = 0; i < MAXU; i++) if (units[i].id && !units[i].dead) { MIX(units[i].id); MIX(units[i].x); MIX(units[i].y); MIX(units[i].hp); MIX(units[i].state); }
+  for (int i = 0; i < MAXB; i++) if (blds[i].id && !blds[i].dead) { MIX(blds[i].id); MIX(blds[i].hp); MIX(blds[i].progress); }
+  for (int t = 0; t < 2; t++) for (int k = 0; k < 4; k++) MIX(teams[t].res[k]);
+  for (int t = 0; t < 2; t++) for (int k = 0; k < STAT_N; k++) MIX(stats[t][k]);
+  MIX(nextId); MIX(winner); MIX(game_time);
+#undef MIX
+  return h;
+}
+static void test_save_load(void) {
+  g_set_map(2); g_set_fog(1); g_init(555, 1, 3);
+  for (int i = 0; i < 20 * 150; i++) g_update(0.05);
+  int len = g_save_size();
+  static uint8_t keep[4 * 1024 * 1024];
+  CHECK(len > 1000 && len < (int)sizeof keep, "save: the save has a sensible size");
+  uint8_t *sb = g_save(); for (int i = 0; i < len; i++) keep[i] = sb[i];
+  for (int i = 0; i < 20 * 60; i++) g_update(0.05);
+  unsigned long long d1 = digest();
+  /* load it into a completely different game and play the same minute again: must end up identical */
+  g_set_map(0); g_set_fog(0); g_init(999, 2, 0);
+  uint8_t *lb = g_load_buf(); for (int i = 0; i < len; i++) lb[i] = keep[i];
+  CHECK(g_load(len) == 1, "save: a valid save loads");
+  CHECK(fogOn == 1 && mapType == 2 && difficulty == 1, "save: map, fog and difficulty come back with the save");
+  for (int i = 0; i < 20 * 60; i++) g_update(0.05);
+  CHECK(digest() == d1, "save: playing on after a load gives exactly the same game as playing on without one");
+  /* the stats are kept and counted */
+  int trained = stats[0][ST_TRAINED] + stats[1][ST_TRAINED], gathered = stats[0][ST_FOOD] + stats[0][ST_WOOD] + stats[1][ST_WOOD];
+  CHECK(trained > 5 && gathered > 100, "stats: training and gathering are counted");
+  /* bad data is refused and leaves the game alone */
+  unsigned long long before = digest();
+  lb = g_load_buf(); for (int i = 0; i < len; i++) lb[i] = keep[i];
+  lb[0] ^= 0xff; CHECK(g_load(len) == 0 && digest() == before, "save: a wrong header is refused");
+  lb[0] ^= 0xff; lb[8] ^= 0x55; CHECK(g_load(len) == 0 && digest() == before, "save: a different layout is refused");
+  lb[8] ^= 0x55; CHECK(g_load(len - 1) == 0 && g_load(0) == 0 && digest() == before, "save: a truncated save is refused");
+  g_set_map(0); g_set_fog(0);
+}
+
 static void test_economy(void) {
   g_init(4242, 1, 0);
   Bld *tc = &blds[0];
@@ -215,6 +254,7 @@ int main(int argc, char **argv) {
   test_map();
   test_maps();
   test_fog();
+  test_save_load();
   test_economy();
   test_combat();
   run_ai_vs_ai(minutes, seed, 1);

@@ -1077,6 +1077,7 @@ function processEvents() {
 
 function overlayOpen() { return !$('overlay').classList.contains('gone'); }
 function showPanel(id) {
+  if (id === 'menu') updateLoadButtons();
   $('overlay').classList.remove('gone');
   for (const p of ['menu', 'endpanel', 'helppanel']) $(p).classList.toggle('hidden', p !== id);
   $('overlay').classList.toggle('clear', id !== 'menu');
@@ -1178,6 +1179,8 @@ function togglePause() {
 
 window.addEventListener('keydown', (e) => {
   keys[e.code] = true;
+  if (e.code === 'F5') { e.preventDefault(); if (game && !overlayOpen()) saveGame(); return; }
+  if (e.code === 'F9') { e.preventDefault(); if (!e.repeat) loadGame(); return; }
   if (e.code === 'F1') { e.preventDefault(); if (!$('helppanel').classList.contains('hidden') && overlayOpen()) { if (game) hideOverlay(); else showPanel('menu'); } else if (game) showPanel('helppanel'); return; }
   if (!game || overlayOpen()) { if (e.code === 'Escape' && !$('helppanel').classList.contains('hidden')) { if (game) hideOverlay(); else showPanel('menu'); } return; }
   if (e.ctrlKey && /^Digit[1-9]$/.test(e.code)) e.preventDefault();
@@ -1232,6 +1235,9 @@ $('btn-start').addEventListener('click', () => {
   startGame(diffChoice);
 });
 $('btn-again').addEventListener('click', () => showPanel('menu'));
+$('btn-save').addEventListener('click', () => { if (game && !overlayOpen()) saveGame(); });
+$('btn-load').addEventListener('click', loadGame);
+$('btn-continue').addEventListener('click', loadGame);
 
 function cameraTick(dt) {
   if (!game || overlayOpen()) return;
@@ -1246,22 +1252,96 @@ function cameraTick(dt) {
 /* --------------------------------- Main loop ----------------------------- */
 
 let endShown = false;   // the end panel opens once per game, so 'Play Again' can reach the menu
-function startGame(diff) {
-  game = new Game({ difficulty: diff, map: mapChoice, fog: fogChoice });
+/* ------------------------------ Save and load ----------------------------- */
+/* A save is about 1.4 MB of mostly zeros, so it is stored with a zero-run encoding (a zero byte is followed by the
+ * length of its run) and base64, which brings it down to tens of kilobytes for localStorage. */
+function rleEncode(bytes) {
+  const out = [];
+  for (let i = 0; i < bytes.length;) {
+    if (bytes[i] !== 0) { out.push(bytes[i++]); continue; }
+    let n = 0; while (i < bytes.length && bytes[i] === 0 && n < 255) { n++; i++; }
+    out.push(0, n);
+  }
+  let bin = ''; const CH = 8192;
+  for (let i = 0; i < out.length; i += CH) bin += String.fromCharCode.apply(null, out.slice(i, i + CH));
+  return btoa(bin);
+}
+function rleDecode(str, size) {
+  const bin = atob(str), out = new Uint8Array(size);
+  let o = 0;
+  for (let i = 0; i < bin.length; i++) {
+    const b = bin.charCodeAt(i);
+    if (b !== 0) { if (o >= size) throw new Error('bad save'); out[o++] = b; continue; }
+    const n = bin.charCodeAt(++i); if (o + n > size) throw new Error('bad save'); o += n;   // zeros are already 0
+  }
+  if (o !== size) throw new Error('bad save');
+  return out;
+}
+const SAVE_KEY = 'peakkk.save';
+function readSaveInfo() {
+  try { const v = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); return v && v.data ? v : null; } catch (e) { return null; }
+}
+function fmtTime(sec) { sec = Math.floor(sec); return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'); }
+function updateLoadButtons() {
+  const v = readSaveInfo(), b = $('btn-continue');
+  b.classList.toggle('hidden', !v);
+  if (v) b.textContent = 'Load Game \u00b7 ' + (MAPS[v.map] ? MAPS[v.map].name : 'saved') + ', ' + fmtTime(v.time || 0);
+  $('btn-load').style.opacity = v ? 1 : 0.4;
+}
+function saveGame() {
+  if (!game) return;
+  if (game.winner !== null) { toast('This game is over - nothing to save'); return; }
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, time: game.time, map: game.map, diff: game.difficulty, data: rleEncode(game.save()) }));
+    toast('Game saved (' + fmtTime(game.time) + ')'); sfx('select');
+  } catch (e) { toast('Could not save: browser storage is unavailable or full'); sfx('err'); }
+  updateLoadButtons();
+}
+function loadGame() {
+  const v = readSaveInfo();
+  if (!v) { toast('No saved game yet (F5 saves)'); sfx('err'); return; }
+  let g;
+  try { g = new Game({ save: rleDecode(v.data, _X.g_save_size()) }); }
+  catch (e) { toast('Could not load that save: ' + e.message); sfx('err'); return; }
+  enterGame(g, 'Game loaded (' + fmtTime(g.time) + ')');
+}
+
+/* ------------------------------ Game start -------------------------------- */
+function enterGame(g, message) {
+  game = g;
   endShown = false;
   soundReset(); sfx('select');   // also unlocks WebAudio, which needs a user gesture
   sel = []; placing = null; cmdMode = null; paused = false; speed = 1; zoom = 1; cmdSig = '';
   pings.length = 0; clickFx.length = 0; for (const k in groups) delete groups[k];
-  $('btn-pause').textContent = '⏸'; $('btn-speed').textContent = '⏩ 1x';
+  $('btn-pause').textContent = '\u23f8'; $('btn-speed').textContent = '\u23e9 1x';
   buildMiniTerrain();
   const tc = game.buildings.find((b) => b.team === 0 && b.type === 'towncenter');
-  centerCam(tc.x + 1.5, tc.y + 1.5);
-  setSel([tc]);
+  centerCam(tc ? tc.x + 1.5 : MAP_W / 2, tc ? tc.y + 1.5 : MAP_H / 2);
+  setSel(tc ? [tc] : []);
   setMode(null);
   hideOverlay();
-  toast('Train builders at your Town Center, then put them to work!');
+  toast(message);
+}
+function startGame(diff) {
+  enterGame(new Game({ difficulty: diff, map: mapChoice, fog: fogChoice }), 'Train builders at your Town Center, then put them to work!');
   const dn = { easy: 'Easy', normal: 'Normal', hard: 'Hard' }[diff];
   setTimeout(() => { if (game) toast('Enemy difficulty: ' + dn + ' \u00b7 Map: ' + MAPS[game.map].name); }, 1200);
+}
+
+function fillEndStats() {
+  const st = game.stats(), rows = [
+    ['Units trained', 'trained'], ['Enemy units killed', 'kills'], ['Units lost', 'lost'], ['Buildings built', 'built'],
+    ['Buildings destroyed', 'bkills'], ['Food gathered', 'food'], ['Wood gathered', 'wood'], ['Gold gathered', 'gold'], ['Stone gathered', 'stone'],
+  ];
+  const t = $('endstats'); t.innerHTML = '';
+  const head = t.insertRow(); head.innerHTML = '<th></th><th style="color:#9af0a6">You</th><th style="color:#f0d56a">Yellow</th>';
+  for (const [label, key] of rows) {
+    const r = t.insertRow(), a = st[0][key], b = st[1][key];
+    const good = key === 'lost' ? a < b : a > b;                 // fewer losses is the better result
+    r.insertCell().textContent = label;
+    const c1 = r.insertCell(); c1.textContent = a; if (good) c1.className = 'win';
+    const c2 = r.insertCell(); c2.textContent = b;
+  }
 }
 
 function frame(ts) {
@@ -1289,6 +1369,7 @@ function frame(ts) {
       $('endtitle').style.color = won ? '#9af0a6' : '#ff8e7e';
       const s = Math.floor(game.time);
       $('endsub').textContent = won ? `The Yellow realm has fallen. Your Green banners fly victorious after ${Math.floor(s / 60)}m ${s % 60}s.` : `Your last building has fallen after ${Math.floor(s / 60)}m ${s % 60}s. The Yellow realm prevails.`;
+      fillEndStats();
       showPanel('endpanel');
     }
     render();

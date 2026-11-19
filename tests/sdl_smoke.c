@@ -46,6 +46,7 @@ static void shot(const char *dir, const char *name) {
 }
 
 int main(int argc, char **argv) {
+  setenv("PEAKKK_SAVE", "/tmp/peakkk_smoke.sav", 1);       /* never touch the real save */
   const char *shots = argc > 1 ? argv[1] : NULL;
   SDL_setenv("SDL_VIDEODRIVER", "dummy", 0);
   SDL_setenv("SDL_AUDIODRIVER", "dummy", 0);
@@ -303,6 +304,45 @@ int main(int argc, char **argv) {
   fogChoice = 0; ui_start_game(1, 777); step(3);
   { int enemy = 0; for (int i = 0; i < nUnits; i++) enemy += mUnits[i].team == 1;
     CHECK(enemy > 0 && mFog[36 * MAP_W + 60] == 2, "without fog the whole map is visible"); }
+  /* ---- save and load (to a throwaway file, never the player's real save) ---- */
+  {
+    const char *tmp = "/tmp/peakkk_smoke.sav";
+    remove(tmp);
+    fogChoice = 0; mapChoice = 3; ui_start_game(2, 31337); step(3);
+    for (int i = 0; i < 60 * 40; i++) ui_update(1.0f / 60.0f);          /* play 40 seconds */
+    float tSave = mTime; int uSave = nUnits, wood = (int)mTeam[0].res[1];
+    CHECK(!save_exists(), "no save file exists yet");
+    CHECK(ui_save_game() == 1 && save_exists(), "F5 writes a save file");
+    FILE *f = fopen(tmp, "rb"); fseek(f, 0, SEEK_END); long sz = ftell(f); fclose(f);
+    CHECK(sz > 1000 && sz < 400000, "the save file is small (zero-run encoded)");
+    for (int i = 0; i < 60 * 30; i++) ui_update(1.0f / 60.0f);
+    CHECK(mTime > tSave + 20, "the game moved on after saving");
+    mapChoice = 0; diffChoice = 0; fogChoice = 1;
+    CHECK(ui_load_game() == 1, "F9 loads the save");
+    CHECK(fabsf(mTime - tSave) < 0.05f && nUnits == uSave && (int)mTeam[0].res[1] == wood, "the loaded game is exactly the saved moment");
+    CHECK(mapChoice == 3 && diffChoice == 2 && fogChoice == 0, "map, difficulty and fog come back with the save");
+    CHECK(screen == SCR_PLAY && inGame, "loading drops straight into the game");
+    /* a damaged file is refused and the running game is untouched */
+    f = fopen(tmp, "r+b"); fseek(f, 20, SEEK_SET); fputc(0xaa, f); fputc(0xbb, f); fseek(f, 3, SEEK_SET); fputc('X', f); fclose(f);
+    float t0 = mTime; CHECK(ui_load_game() == 0 && fabsf(mTime - t0) < 0.001f, "a damaged save is refused and the game keeps running");
+    f = fopen(tmp, "wb"); fwrite("junk", 1, 4, f); fclose(f);
+    CHECK(ui_load_game() == 0, "a garbage file is refused");
+    /* the menu shows Load Game once a save exists */
+    ui_save_game(); screen = SCR_MENU; haveSave = 1; ui_draw();
+    Rc ls = menu_load_rc(); screen = SCR_MENU; inGame = 1;
+    click(SDL_BUTTON_LEFT, ls.x + 10, ls.y + 10, 0);
+    CHECK(screen == SCR_PLAY && fabsf(mTime - tSave) < 0.05f, "the Load Game button in the menu continues the saved game");
+    /* the compression round trips */
+    static uint8_t raw[5000], enc[10100], dec[5000];
+    for (int i = 0; i < 5000; i++) raw[i] = (i % 7 == 0 || (i > 2000 && i < 4400)) ? 0 : (uint8_t)(i * 31);
+    int el = rle_encode(raw, 5000, enc);
+    CHECK(rle_decode(enc, el, dec, 5000) == 5000 && !memcmp(raw, dec, 5000), "zero-run encoding round-trips");
+    CHECK(rle_decode(enc, el, dec, 100) == -1 && rle_decode((const uint8_t *)"\x01\x00", 2, dec, 100) == -1, "oversized or truncated encoded data is rejected");
+    remove(tmp);
+  }
+  /* ---- end screen statistics ---- */
+  { ui_start_game(1, 9); step(2); mWinner = 0; check_end(); step(1); shot(shots, "end_stats");
+    CHECK(overlayPanel == PANEL_END, "the end panel (with statistics) opens when the game is decided"); }
   printf("%d checks, %d failed\n", checks, failures);
   ui_shutdown();
   return failures ? 1 : 0;

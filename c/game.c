@@ -129,6 +129,9 @@ static int nev, nproj, neff;
 static int idmap[MAXID];             /* id -> (kind << 20) | slot */
 static int nextId;
 static Team teams[2];
+/* per-team game statistics for the end screen */
+enum { ST_TRAINED, ST_KILLS, ST_LOST, ST_BKILLS, ST_BLOST, ST_BUILT, ST_FOOD, ST_WOOD, ST_GOLD, ST_STONE, STAT_N };
+static int stats[2][STAT_N];
 static AI ais[2];
 static double game_time, win_check, path_budget;
 static int winner, difficulty;
@@ -981,7 +984,13 @@ static void damage(int akind, int atype, int aid, int ateam, const TV *t) {
       if (canAttackTV(tu, &atv)) { double hx = tu->x, hy = tu->y; setOrder(tu, S_ATTACK, au->id, 0, 0, 0); tu->autoAtk = 1; tu->hasHome = 1; tu->homeX = hx; tu->homeY = hy; }
     }
   }
-  if (*hp <= 0) kill(t);
+  if (*hp <= 0) {
+    if (ateam >= 0 && ateam < 2) {
+      if (t->kind == K_UNIT) { stats[ateam][ST_KILLS]++; stats[t->team][ST_LOST]++; }
+      else { stats[ateam][ST_BKILLS]++; stats[t->team][ST_BLOST]++; }
+    }
+    kill(t);
+  }
 }
 
 static void kill(const TV *t) {
@@ -1176,6 +1185,7 @@ static void updateGather(Unit *u, double dt) {
       int n = (int)u->carry;
       if (n > 0) {
         team->res[u->carryType] += n;
+        stats[u->team][ST_FOOD + u->carryType] += n;
         if (u->team == 0) floatText(u->x, u->y, n, u->carryType);
       }
       u->carry -= n;
@@ -1187,6 +1197,7 @@ static void updateGather(Unit *u, double dt) {
 static void completeBuilding(Bld *b) {
   b->done = 1; b->progress = 1; b->hp = b->maxHp;
   recalcPop(b->team);
+  stats[b->team][ST_BUILT]++;
   pushEvent(EV_BUILT, b->team, b->x, b->y, b->type, 0);
 }
 
@@ -1251,6 +1262,7 @@ static int finishQueueItem(Bld *b, QItem *q) {
   if (!findSpawn(b, UDEF[q->type].water, b->hasRally, b->rx, b->ry, &x, &y)) return 0;
   Unit *u = createUnit(b->team, q->type, x, y);
   if (!u) return 0;
+  stats[b->team][ST_TRAINED]++;
   if (b->hasRally) {
     int one[1] = { u->id };
     TV rt;
@@ -1759,6 +1771,7 @@ EXPORT("g_init") void g_init(uint32_t seed, int diff, int aiMask) {
     spawnUnitAt(tc, U_SPEARMAN);
   }
   for (int i = 0; i < 2; i++) if (aiMask & (1 << i)) aiInit(&ais[i], i, difficulty);
+  __builtin_memset(stats, 0, sizeof(stats));           /* the starting units are not 'trained' */
   __builtin_memset(fog, 0, sizeof(fog));
   __builtin_memset(ghostId, 0, sizeof(ghostId));
   fogUpdate();
@@ -1886,4 +1899,56 @@ EXPORT("g_shade") uint8_t *g_shade(void) { return shade; }
 EXPORT("g_layout") int g_layout(int which) {
   switch (which) { case 0: return U_STRIDE; case 1: return B_STRIDE; case 2: return N_STRIDE; case 3: return P_STRIDE; case 4: return E_STRIDE; case 5: return EV_STRIDE; case 6: return T_STRIDE; case 7: return MAXORD; }
   return -1;
+}
+
+/* ----------------------------- Statistics ---------------------------------- */
+EXPORT("g_get_map") int g_get_map(void) { return mapType; }
+EXPORT("g_get_diff") int g_get_diff(void) { return difficulty; }
+EXPORT("g_get_fog") int g_get_fog(void) { return fogOn; }
+EXPORT("g_stats") int *g_stats(void) { return &stats[0][0]; }     /* [team][STAT_N]: trained, kills, lost, bkills, blost, built, food, wood, gold, stone */
+EXPORT("g_stat_count") int g_stat_count(void) { return STAT_N; }
+
+/* ------------------------------ Save and load ------------------------------ */
+/* The whole simulation is plain data (no pointers), so a save is these arrays copied one after the other behind a header
+ * that records the layout; a save from a build with a different layout is refused instead of being misread. Scratch data
+ * (path search buffers, snapshot arrays) is not saved: it is rebuilt on demand. */
+#define SAVE_LIST(X) X(rng_state) X(units) X(blds) X(nodes) X(projs) X(effs) X(evs) X(nev) X(nproj) X(neff) X(idmap) X(nextId) \
+  X(teams) X(ais) X(game_time) X(win_check) X(path_budget) X(winner) X(difficulty) X(terrain) X(lake) X(shade) X(occ) X(mapType) \
+  X(fogOn) X(fog) X(ghostRow) X(ghostId) X(stats)
+#define SAVE_SIZE_ADD(x) + sizeof(x)
+#define SAVE_HEAD 16
+enum { SAVE_PAYLOAD = 0 SAVE_LIST(SAVE_SIZE_ADD) };
+static uint8_t saveBuf[SAVE_HEAD + SAVE_PAYLOAD];
+static uint32_t saveLayout(void) {
+  uint32_t h = 2166136261u;
+#define SAVE_HASH(x) h = (h ^ (uint32_t)sizeof(x)) * 16777619u;
+  SAVE_LIST(SAVE_HASH)
+#undef SAVE_HASH
+  return h ^ (MAP_W * 131u + MAP_H);
+}
+static void saveCopy(void *dst, const void *src, int n) { uint8_t *d = dst; const uint8_t *q = src; for (int i = 0; i < n; i++) d[i] = q[i]; }
+EXPORT("g_save_size") int g_save_size(void) { return SAVE_HEAD + (int)SAVE_PAYLOAD; }
+/* Fills the save buffer and returns it (g_save_size() bytes). */
+EXPORT("g_save") uint8_t *g_save(void) {
+  uint32_t head[4] = { 0x31534b50u /* "PKS1" */, (uint32_t)SAVE_PAYLOAD, saveLayout(), 0 };
+  saveCopy(saveBuf, head, SAVE_HEAD);
+  int off = SAVE_HEAD;
+#define SAVE_OUT(x) saveCopy(saveBuf + off, &(x), (int)sizeof(x)); off += (int)sizeof(x);
+  SAVE_LIST(SAVE_OUT)
+#undef SAVE_OUT
+  return saveBuf;
+}
+/* The buffer to write a save into before calling g_load. */
+EXPORT("g_load_buf") uint8_t *g_load_buf(void) { return saveBuf; }
+/* Restores the game from g_load_buf(); len is the number of bytes written there. Returns 1, or 0 if the data is not a
+ * compatible save (the current game is then left untouched). */
+EXPORT("g_load") int g_load(int len) {
+  uint32_t head[4]; if (len != SAVE_HEAD + (int)SAVE_PAYLOAD) return 0;
+  saveCopy(head, saveBuf, SAVE_HEAD);
+  if (head[0] != 0x31534b50u || head[1] != (uint32_t)SAVE_PAYLOAD || head[2] != saveLayout()) return 0;
+  int off = SAVE_HEAD;
+#define SAVE_IN(x) saveCopy(&(x), saveBuf + off, (int)sizeof(x)); off += (int)sizeof(x);
+  SAVE_LIST(SAVE_IN)
+#undef SAVE_IN
+  return 1;
 }

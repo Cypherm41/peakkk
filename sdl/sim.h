@@ -42,7 +42,14 @@ float *g_snap_events(void);
 float *g_snap_teams(void);
 uint8_t *g_terrain(void);
 void g_set_fog(int on);      /* 1 = fog of war for team 0 (applies to the next g_init; the snapshot then omits what team 0 cannot see) */
-uint8_t *g_fog(void);        /* per tile: 0 unexplored, 1 explored, 2 in sight (all 2 when fog is off) */
+uint8_t *g_fog(void);
+int *g_stats(void);          /* [team][g_stat_count()]: trained, kills, lost, bkills, blost, built, food, wood, gold, stone */
+int g_stat_count(void);
+int g_save_size(void);       /* save / load of the whole game: g_save() returns g_save_size() bytes; write a save into g_load_buf() and call g_load(len) */
+uint8_t *g_save(void);
+uint8_t *g_load_buf(void);
+int g_load(int len);         /* 1 = restored, 0 = not a compatible save (game untouched) */
+int g_get_map(void); int g_get_diff(void); int g_get_fog(void);        /* per tile: 0 unexplored, 1 explored, 2 in sight (all 2 when fog is off) */
 uint8_t *g_lake(void);
 uint8_t *g_shade(void);
 int g_layout(int which);
