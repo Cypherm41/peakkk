@@ -1675,7 +1675,9 @@ static void separate(double dt) {
  * of sight, 2 = in sight right now. When fog is on, g_snapshot leaves out every enemy unit, building, projectile and
  * effect that is not in sight, and nodes nobody has explored yet, so the front ends cannot draw or pick what they must
  * not see. The AI is not restricted (it plays by the real state). Off by default; the front ends turn it on. */
+#define B_STRIDE 34
 static int fogOn;
+static float ghostRow[MAXB][B_STRIDE]; static int ghostId[MAXB];   /* last-seen enemy buildings (fog of war) */
 static uint8_t fog[MAP_W * MAP_H];
 static void fogReveal(double cx, double cy, double r) {
   int x0 = (int)(cx - r), x1 = (int)(cx + r + 1), y0 = (int)(cy - r), y1 = (int)(cy + r + 1);
@@ -1758,6 +1760,7 @@ EXPORT("g_init") void g_init(uint32_t seed, int diff, int aiMask) {
   }
   for (int i = 0; i < 2; i++) if (aiMask & (1 << i)) aiInit(&ais[i], i, difficulty);
   __builtin_memset(fog, 0, sizeof(fog));
+  __builtin_memset(ghostId, 0, sizeof(ghostId));
   fogUpdate();
 }
 
@@ -1784,7 +1787,6 @@ EXPORT("g_winner") int g_winner(void) { return winner; }
 
 /* ---- snapshot: flat float arrays the renderer reads ---- */
 #define U_STRIDE 20
-#define B_STRIDE 34
 #define N_STRIDE 6
 #define P_STRIDE 8
 #define E_STRIDE 9
@@ -1794,6 +1796,16 @@ static float snapU[MAXU * U_STRIDE], snapB[MAXB * B_STRIDE], snapN[MAXN * N_STRI
 static float snapP[MAXP * P_STRIDE], snapE[MAXE * E_STRIDE], snapEv[MAXEV * EV_STRIDE], snapT[2 * T_STRIDE + 2];
 static int snapCount[6];
 
+static void fillBldRow(float *o, const Bld *b) {
+  o[0] = b->id; o[1] = b->type; o[2] = b->team; o[3] = b->x; o[4] = b->y; o[5] = b->w; o[6] = b->h; o[7] = (float)b->hp; o[8] = (float)b->maxHp;
+  o[9] = b->done; o[10] = (float)b->progress; o[11] = (float)b->qt; o[12] = b->qlen; o[13] = b->hasRally; o[14] = (float)b->rx; o[15] = (float)b->ry;
+  o[16] = b->rtarget; o[17] = b->nusers;
+  for (int q = 0; q < 5; q++) {
+    if (q < b->qlen) { o[18 + q * 3] = b->q[q].kind; o[19 + q * 3] = b->q[q].type; o[20 + q * 3] = (float)b->q[q].time; }
+    else { o[18 + q * 3] = -1; o[19 + q * 3] = 0; o[20 + q * 3] = 0; }
+  }
+  o[33] = 0;
+}
 EXPORT("g_snapshot") void g_snapshot(void) {
   int nu = 0, nb = 0, nn = 0, np = 0, ne = 0;
   fogUpdate();
@@ -1811,17 +1823,22 @@ EXPORT("g_snapshot") void g_snapshot(void) {
   }
   for (int i = 0; i < MAXB; i++) {
     const Bld *b = &blds[i];
-    if (!b->id || b->dead) continue;
-    if (fogOn && b->team != 0 && !fogSeesBld(b)) continue;
-    float *o = &snapB[nb++ * B_STRIDE];
-    o[0] = b->id; o[1] = b->type; o[2] = b->team; o[3] = b->x; o[4] = b->y; o[5] = b->w; o[6] = b->h; o[7] = (float)b->hp; o[8] = (float)b->maxHp;
-    o[9] = b->done; o[10] = (float)b->progress; o[11] = (float)b->qt; o[12] = b->qlen; o[13] = b->hasRally; o[14] = (float)b->rx; o[15] = (float)b->ry;
-    o[16] = b->rtarget; o[17] = b->nusers;
-    for (int q = 0; q < 5; q++) {
-      if (q < b->qlen) { o[18 + q * 3] = b->q[q].kind; o[19 + q * 3] = b->q[q].type; o[20 + q * 3] = (float)b->q[q].time; }
-      else { o[18 + q * 3] = -1; o[19 + q * 3] = 0; o[20 + q * 3] = 0; }
+    int real = b->id && !b->dead;
+    if (!fogOn || (real && b->team == 0)) { if (!real) continue; fillBldRow(&snapB[nb++ * B_STRIDE], b); continue; }
+    /* fog on, and this is not ours: show it while in sight, otherwise show what we last saw of it (a ghost) until the
+     * ground it stood on is seen again and turns out empty */
+    if (real && fogSeesBld(b)) {
+      float *o = &snapB[nb++ * B_STRIDE]; fillBldRow(o, b);
+      for (int k = 0; k < B_STRIDE; k++) ghostRow[i][k] = o[k];
+      ghostId[i] = b->id; continue;
     }
-    o[33] = 0;
+    if (!ghostId[i]) continue;
+    const float *g = ghostRow[i];
+    int seen = 0;
+    if (!real || b->id != ghostId[i]) for (int jy = 0; jy < (int)g[6] && !seen; jy++) for (int jx = 0; jx < (int)g[5]; jx++) if (fogSees((int)g[3] + jx, (int)g[4] + jy)) { seen = 1; break; }
+    if (seen) { ghostId[i] = 0; continue; }
+    float *o = &snapB[nb++ * B_STRIDE];
+    for (int k = 0; k < B_STRIDE; k++) o[k] = g[k];
   }
   for (int i = 0; i < MAXN; i++) {
     const Node *n = &nodes[i];

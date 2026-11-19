@@ -89,10 +89,21 @@ static void test_fog(void) {
   for (int i = 0; i < snapCount[0]; i++) if ((int)snapU[i * U_STRIDE + 2] == 1) seenEnemy++;
   CHECK(seenEnemy >= 1, "fog: a scout next to the enemy base sees its buildings and units");
   scout->x = ox; scout->y = oy;
-  g_snapshot(); seenEnemy = 0;
-  for (int i = 0; i < snapCount[1]; i++) if ((int)snapB[i * B_STRIDE + 2] == 1) seenEnemy++;
-  for (int i = 0; i < snapCount[0]; i++) if ((int)snapU[i * U_STRIDE + 2] == 1) seenEnemy++;
-  CHECK(seenEnemy == 0, "fog: the enemy disappears again once the scout leaves");
+  g_snapshot(); int ghostB = 0, enemyU = 0;
+  for (int i = 0; i < snapCount[1]; i++) if ((int)snapB[i * B_STRIDE + 2] == 1) ghostB++;
+  for (int i = 0; i < snapCount[0]; i++) if ((int)snapU[i * U_STRIDE + 2] == 1) enemyU++;
+  CHECK(enemyU == 0, "fog: enemy units disappear again once the scout leaves");
+  CHECK(ghostB >= 1, "fog: enemy buildings we saw are remembered after the scout leaves");
+  /* destroyed while out of sight: we still remember it; once the ground is seen again it is gone */
+  for (int i = 0; i < MAXB; i++) if (blds[i].id && blds[i].team == 1) blds[i].dead = 1;
+  g_snapshot(); int stillGhost = 0;
+  for (int i = 0; i < snapCount[1]; i++) if ((int)snapB[i * B_STRIDE + 2] == 1) stillGhost++;
+  CHECK(stillGhost == ghostB, "fog: a building destroyed out of sight is still remembered");
+  scout->x = base_x[1] - 4; scout->y = base_y[1];
+  g_snapshot(); int afterLook = 0;
+  for (int i = 0; i < snapCount[1]; i++) if ((int)snapB[i * B_STRIDE + 2] == 1) afterLook++;
+  CHECK(afterLook == 0, "fog: looking at the spot again clears the memory of a destroyed building");
+  scout->x = ox; scout->y = oy; g_snapshot();
   CHECK(fog[base_y[1] * MAP_W + base_x[1] - 4] == 1, "fog: the area the scout passed stays explored");
   /* with fog off everything is delivered and every tile counts as visible */
   g_set_fog(0); g_init(4242, 1, 0); g_snapshot();
