@@ -29,6 +29,9 @@ arr('TECH_NAME', D.TECH_KEYS, (k) => D.TECHS[k].name);
 arr('TECH_DESC', D.TECH_KEYS, (k) => D.TECHS[k].desc);
 arr('NODE_NAME', D.NODE_KEYS, (k) => D.NODE_DEFS[k].name);
 arr('MAP_NAME', D.MAP_KEYS, (k) => D.MAPS[k].name);
+arr('FAC_NAME', D.FACTION_KEYS, (k) => D.FACTIONS[k].name);
+arr('FAC_DESC', D.FACTION_KEYS, (k) => D.FACTIONS[k].desc);
+o += `#define FAC_COUNT ${D.FACTION_KEYS.length}\n`;
 arr('MAP_DESC', D.MAP_KEYS, (k) => D.MAPS[k].desc);
 for (const ph of ['A', 'B']) {
   o += `static const int MUSIC_${ph}_NOTES[][2] = { ${D.MUSIC[ph].melody.map((n) => `{ ${n[0]}, ${n[1]} }`).join(', ')} };\n`;

@@ -23,7 +23,8 @@ let placing = null;       // { type, x, y, valid }
 let cmdMode = null;       // 'attackmove'
 let paused = false, speed = 1, lastT = 0, hudTimer = 0, idleIdx = 0;
 let diffChoice = 'normal';
-try { const v = JSON.parse(localStorage.getItem('peakkk.menu') || '{}'); if (DIFFS[v.d]) diffChoice = v.d; if (MAPS[v.m]) var savedMap = v.m; if (v.f === false) var savedFog = false; } catch (e) {}
+try { const v = JSON.parse(localStorage.getItem('peakkk.menu') || '{}'); if (DIFFS[v.d]) diffChoice = v.d; if (MAPS[v.m]) var savedMap = v.m; if (v.f === false) var savedFog = false; if (FACTIONS[v.fa]) var savedFac = v.fa; } catch (e) {}
+let facChoice = (typeof savedFac !== 'undefined') ? savedFac : 'rangers';
 let fogChoice = (typeof savedFog === 'undefined');
 let mapChoice = (typeof savedMap === 'string') ? savedMap : 'lake';
 let curCmds = new Array(12).fill(null);
@@ -1227,11 +1228,18 @@ function setMapChoice(k) {
 }
 for (const b of document.querySelectorAll('.map')) b.addEventListener('click', () => setMapChoice(b.dataset.m));
 setMapChoice(mapChoice);
+function setFacChoice(k) {
+  facChoice = k;
+  for (const o of document.querySelectorAll('.fac')) o.classList.toggle('sel', o.dataset.f === k);
+  $('facdesc').textContent = FACTIONS[k].desc;
+}
+for (const b of document.querySelectorAll('.fac')) b.addEventListener('click', () => setFacChoice(b.dataset.f));
+setFacChoice(facChoice);
 function setFogChoice(on) { fogChoice = on; $('fogbtn').textContent = on ? 'On' : 'Off'; $('fogbtn').classList.toggle('sel', on); }
 $('fogbtn').addEventListener('click', () => setFogChoice(!fogChoice));
 setFogChoice(fogChoice);
 $('btn-start').addEventListener('click', () => {
-  try { localStorage.setItem('peakkk.menu', JSON.stringify({ d: diffChoice, m: mapChoice, f: fogChoice })); } catch (e) {}
+  try { localStorage.setItem('peakkk.menu', JSON.stringify({ d: diffChoice, m: mapChoice, f: fogChoice, fa: facChoice })); } catch (e) {}
   startGame(diffChoice);
 });
 $('btn-again').addEventListener('click', () => showPanel('menu'));
@@ -1323,9 +1331,9 @@ function enterGame(g, message) {
   toast(message);
 }
 function startGame(diff) {
-  enterGame(new Game({ difficulty: diff, map: mapChoice, fog: fogChoice }), 'Train builders at your Town Center, then put them to work!');
+  enterGame(new Game({ difficulty: diff, map: mapChoice, fog: fogChoice, faction: facChoice }), 'Train builders at your Town Center, then put them to work!');
   const dn = { easy: 'Easy', normal: 'Normal', hard: 'Hard' }[diff];
-  setTimeout(() => { if (game) toast('Enemy difficulty: ' + dn + ' \u00b7 Map: ' + MAPS[game.map].name); }, 1200);
+  setTimeout(() => { if (game) toast('Enemy difficulty: ' + dn + ' \u00b7 Map: ' + MAPS[game.map].name + (game.faction[0] ? ' \u00b7 ' + FACTIONS[FACTION_KEYS[game.faction[0] - 1]].name : '')); }, 1200);
 }
 
 function fillEndStats() {

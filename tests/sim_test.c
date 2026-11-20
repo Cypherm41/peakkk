@@ -248,6 +248,41 @@ static void run_passive(int diff) {
   CHECK(winner == 1, "AI destroys a passive player");
 }
 
+/* factions: classic is neutral; Rangers/Legion change unit stats and prices, deterministically */
+static void test_factions(void) {
+  /* classic is neutral: stats and prices equal the unit table */
+  g_set_faction(0, 0); g_set_faction(1, 0); g_init(5, 1, 0);
+  CHECK(g_get_faction(0) == 0 && g_get_faction(1) == 0, "default factions are classic");
+  Unit *c = createUnit(0, U_SWORDSMAN, 30.5, 10.5);
+  CHECK(c->maxHp == UDEF[U_SWORDSMAN].hp, "classic swordsman has base health");
+  /* Rangers (1) vs Legion (2) */
+  g_set_faction(0, 1); g_set_faction(1, 2); g_init(5, 1, 0);
+  CHECK(g_get_faction(0) == 1 && g_get_faction(1) == 2, "factions are stored per team");
+  Unit *sw0 = createUnit(0, U_SWORDSMAN, 30.5, 10.5), *sw1 = createUnit(1, U_SWORDSMAN, 31.5, 10.5);
+  CHECK(sw1->maxHp > sw0->maxHp && sw1->maxHp == UDEF[U_SWORDSMAN].hp * 1.15, "Legion swordsmen are tougher than Ranger ones");
+  teams[0].res[R_WOOD] = 1000; teams[0].res[R_GOLD] = 1000; teams[0].popCap = 100;
+  teams[1].res[R_WOOD] = 1000; teams[1].res[R_GOLD] = 1000; teams[1].popCap = 100;
+  double w = teams[0].res[R_WOOD];
+  Bld fake; __builtin_memset(&fake, 0, sizeof fake); fake.id = 1; fake.team = 0; fake.type = B_ARCHERY; fake.done = 1;
+  CHECK(queueUnit(&fake, U_ARCHER) == ERR_NONE, "Rangers can queue an archer");
+  CHECK(w - teams[0].res[R_WOOD] == 34, "Ranger archer costs 15% less wood (40 -> 34)");
+  w = teams[1].res[R_WOOD]; fake.team = 1; fake.qlen = 0;
+  CHECK(queueUnit(&fake, U_ARCHER) == ERR_NONE && w - teams[1].res[R_WOOD] == 40, "Legion archer keeps the base price");
+  /* determinism: same seed and factions give the same game */
+  g_set_faction(0, 2); g_set_faction(1, 1); g_init(9, 1, 3);
+  for (int i = 0; i < 600; i++) g_update(0.1);
+  unsigned long long d1 = digest();
+  g_set_faction(0, 2); g_set_faction(1, 1); g_init(9, 1, 3);
+  for (int i = 0; i < 600; i++) g_update(0.1);
+  CHECK(d1 == digest(), "faction games are deterministic");
+  /* save/load keeps factions */
+  g_set_faction(0, 1); g_set_faction(1, 2); g_init(3, 1, 2);
+  int n = g_save_size(); g_save();
+  g_set_faction(0, 0); g_set_faction(1, 0); g_init(4, 1, 2);
+  CHECK(g_load(n) && g_get_faction(0) == 1 && g_get_faction(1) == 2, "save/load keeps the factions");
+  g_set_faction(0, 0); g_set_faction(1, 0);
+}
+
 int main(int argc, char **argv) {
   double minutes = argc > 1 ? atof(argv[1]) : 25;
   uint32_t seed = argc > 2 ? (uint32_t)atoi(argv[2]) : 12345;
@@ -255,6 +290,7 @@ int main(int argc, char **argv) {
   test_maps();
   test_fog();
   test_save_load();
+  test_factions();
   test_economy();
   test_combat();
   run_ai_vs_ai(minutes, seed, 1);

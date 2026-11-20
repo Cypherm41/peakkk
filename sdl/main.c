@@ -5,6 +5,7 @@
  * Options:
  *   --difficulty easy|normal|hard   difficulty of the Yellow AI (default normal)
  *   --map lake|plains|river|ponds|forest   terrain (default lake)
+ *   --faction 0|1                   Ironwood Rangers (0, default) or Sunhold Legion (1); the AI plays the other
  *   --no-fog                        play with the whole map visible (fog of war is on by default)
  *   --seed N                        map seed (default: random)
  *   --start                         skip the menu and start a game right away
@@ -16,7 +17,7 @@
 #include "ui.h"
 
 static void usage(const char *argv0) {
-  printf("usage: %s [--difficulty easy|normal|hard] [--map lake|plains|river|ponds|forest] [--no-fog] [--seed N] [--start] [--size WxH] [--frames N] [--shot FILE.bmp]\n", argv0);
+  printf("usage: %s [--difficulty easy|normal|hard] [--map lake|plains|river|ponds|forest] [--faction 0|1] [--no-fog] [--seed N] [--start] [--size WxH] [--frames N] [--shot FILE.bmp]\n", argv0);
 }
 
 int main(int argc, char **argv) {
@@ -28,6 +29,7 @@ int main(int argc, char **argv) {
     if (!strcmp(a, "--help") || !strcmp(a, "-h")) { usage(argv[0]); return 0; }
     else if (!strcmp(a, "--start")) start = 1;
     else if (!strcmp(a, "--no-fog")) fogChoice = 0;
+    else if (!strcmp(a, "--faction") && i + 1 < argc) facChoice = atoi(argv[++i]) ? 1 : 0;   /* 0 Rangers, 1 Legion */
     else if (!strcmp(a, "--difficulty") && i + 1 < argc) {
       const char *d = argv[++i];
       diff = !strcmp(d, "easy") ? 0 : !strcmp(d, "hard") ? 2 : 1;

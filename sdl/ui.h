@@ -539,7 +539,7 @@ static int ui_load_game(void) {
   if (ok) ok = rle_decode(enc, elen, g_load_buf(), raw) == raw;      /* decoded straight into the core's load buffer */
   free(enc);
   if (!ok || !g_load(raw)) { sfx(SFX_ERR); toast(0, "Could not load that save (damaged or from another version)"); return 0; }
-  diffChoice = g_get_diff(); mapChoice = g_get_map(); fogChoice = g_get_fog();
+  diffChoice = g_get_diff(); mapChoice = g_get_map(); fogChoice = g_get_fog(); if (g_get_faction(0) > 0) facChoice = g_get_faction(0) - 1;
   ui_enter_game("Game loaded");
   return 1;
 }
@@ -567,6 +567,7 @@ static void ui_enter_game(const char *message) {
 static void ui_start_game(int diff, unsigned seed) {
   g_set_map(mapChoice);
   g_set_fog(fogChoice);
+  g_set_faction(0, facChoice + 1); g_set_faction(1, (facChoice ^ 1) + 1);
   g_init(seed, diff, 1 << 1);
   diffChoice = diff;
   ui_enter_game("Train builders at your Town Center, then put them to work!");
@@ -606,7 +607,7 @@ static void ui_update(float dt) {
   for (int i = nPings - 1; i >= 0; i--) { pings[i].t += dt; if (pings[i].t > 1.5f) { memmove(pings + i, pings + i + 1, (size_t)(nPings - i - 1) * sizeof(Fx)); nPings--; } }
   if (placingOn) update_placing();
   hoverId = (mouse.seen && !overlay_open() && !placingOn && !mouse.drag && !mouse.mid && in_world(mouse.y)) ? pick_at(mouse.x, mouse.y) : 0;
-  if (diffToastTimer > 0 && (diffToastTimer -= dt) <= 0) toast(0, "Enemy difficulty: %s - Map: %s", DIFF_NAME[diffChoice], MAP_NAME[mapChoice]);
+  if (diffToastTimer > 0 && (diffToastTimer -= dt) <= 0) toast(0, "Enemy difficulty: %s - Map: %s%s%s", DIFF_NAME[diffChoice], MAP_NAME[mapChoice], g_get_faction(0) ? " - " : "", g_get_faction(0) ? FAC_NAME[g_get_faction(0) - 1] : "");
   { float hp = 0; for (int i = 0; i < nUnits; i++) hp += mUnits[i].hp; for (int i = 0; i < nBlds; i++) if (mBlds[i].done) hp += mBlds[i].hp;
     sound_tick(dt, nUnits, hp, nProjs, !paused && !overlay_open()); }
   check_end();
@@ -933,12 +934,13 @@ static void draw_hud(void) {
 
 /* ------------------------------ overlays: menu, help, end screen ------------------------------ */
 
-static Rc menu_rc(void) { float w = fminf(640, W - 32), h = 740; Rc r = { (W - w) / 2, (H - h) / 2, w, h }; return r; }
+static Rc menu_rc(void) { float w = fminf(640, W - 32), h = 800; Rc r = { (W - w) / 2, (H - h) / 2, w, h }; return r; }
 static Rc menu_diff_rc(int i) { Rc p = menu_rc(); float x0 = p.x + (p.w - (3 * 204 - 8)) / 2; Rc r = { x0 + i * 104, p.y + 150, 96, 34 }; return r; }
 static Rc menu_map_rc(int i) { Rc p = menu_rc(); float x0 = p.x + (p.w - (3 * 204 - 8)) / 2; Rc r = { x0 + (i % 3) * 204, p.y + 218 + (i / 3) * 40, 196, 32 }; return r; }
 static Rc menu_fog_rc(void) { Rc p = menu_rc(); float x0 = p.x + (p.w - (3 * 204 - 8)) / 2; Rc r = { x0 + 2 * 204, p.y + 150, 196, 34 }; return r; }
-static Rc menu_start_rc(void) { Rc p = menu_rc(); float tot = haveSave ? 496 : 240; Rc r = { p.x + (p.w - tot) / 2, p.y + 356, 240, 50 }; return r; }
-static Rc menu_load_rc(void) { Rc p = menu_rc(); Rc r = { p.x + (p.w - 496) / 2 + 256, p.y + 356, 240, 50 }; return r; }
+static Rc menu_fac_rc(int i) { Rc p = menu_rc(); float x0 = p.x + (p.w - (3 * 204 - 8)) / 2; Rc r = { x0 + i * 306, p.y + 378, 298, 32 }; return r; }
+static Rc menu_start_rc(void) { Rc p = menu_rc(); float tot = haveSave ? 496 : 240; Rc r = { p.x + (p.w - tot) / 2, p.y + 490, 240, 50 }; return r; }
+static Rc menu_load_rc(void) { Rc p = menu_rc(); Rc r = { p.x + (p.w - 496) / 2 + 256, p.y + 490, 240, 50 }; return r; }
 
 static const char *HELP_ROWS[][2] = {
   { "Left click / drag", "Select units or buildings (double click: all of a type on screen)" },
@@ -998,6 +1000,9 @@ static void draw_menu(void) {
   text(menu_map_rc(0).x, p.y + 194, 2, 0xcdbd93, 1, "Map");
   for (int i = 0; i < MAP_COUNT; i++) { Rc r = menu_map_rc(i); ui_button(r, MAP_NAME[i], 2, mapChoice == i, in_rc(r, mouse.x, mouse.y)); }
   text_wrap(menu_map_rc(0).x, p.y + 304, p.w - 2 * (menu_map_rc(0).x - p.x), 2, 0xdfcfa3, 1, MAP_DESC[mapChoice], 1);
+  text(menu_map_rc(0).x, p.y + 356, 2, 0xcdbd93, 1, "Your faction");
+  for (int i = 0; i < FAC_COUNT; i++) { Rc r = menu_fac_rc(i); ui_button(r, FAC_NAME[i], 2, facChoice == i, in_rc(r, mouse.x, mouse.y)); }
+  text_wrap(menu_map_rc(0).x, p.y + 420, p.w - 2 * (menu_map_rc(0).x - p.x), 2, 0xdfcfa3, 1, FAC_DESC[facChoice], 1);
   if (SDL_GetTicks() - saveCheckTick > 1000 || !saveCheckTick) { saveCheckTick = SDL_GetTicks() | 1; haveSave = save_exists(); }
   Rc s = menu_start_rc(); big_button(s, "Start Game", in_rc(s, mouse.x, mouse.y));
   if (haveSave) { Rc l = menu_load_rc(); big_button(l, "Load Game", in_rc(l, mouse.x, mouse.y)); }
@@ -1007,7 +1012,7 @@ static void draw_menu(void) {
     "Raise an army from the Barracks, Archery Range and Stable. Swordsmen beat spearmen, spearmen beat cavalry, cavalry beat archers, archers beat swordsmen.",
     "Destroy every Yellow building to win. Press F1 in game for all controls.",
   };
-  float y = p.y + 428;
+  float y = p.y + 560;
   for (int i = 0; i < 4; i++) {
     int n = text_wrap(0, 0, p.w - 80, 2, 0, 1, tips[i], 0);
     if (y + n * 20 > p.y + p.h - 34) break;                       /* never spill over the footer in a short window */
@@ -1096,6 +1101,7 @@ static void overlay_click(float x, float y) {
     for (int i = 0; i < 3; i++) if (in_rc(menu_diff_rc(i), x, y)) { diffChoice = i; return; }
     if (in_rc(menu_fog_rc(), x, y)) { fogChoice = !fogChoice; return; }
     for (int i = 0; i < MAP_COUNT; i++) if (in_rc(menu_map_rc(i), x, y)) { mapChoice = i; return; }
+    for (int i = 0; i < FAC_COUNT; i++) if (in_rc(menu_fac_rc(i), x, y)) { facChoice = i; return; }
     if (haveSave && in_rc(menu_load_rc(), x, y)) { ui_load_game(); return; }
     if (in_rc(menu_start_rc(), x, y)) ui_start_game(diffChoice, (unsigned)time(NULL) ^ (SDL_GetTicks() * 2654435761u));
   } else if (overlayPanel == PANEL_HELP) {

@@ -74,6 +74,10 @@ int main(int argc, char **argv) {
     mapChoice = m; step(2);
     char name[80]; snprintf(name, sizeof name, "menu_map%d", m); shot(shots, name);
   }
+  CHECK(facChoice == 0, "Ironwood Rangers are selected by default");
+  click(SDL_BUTTON_LEFT, menu_fac_rc(1).x + 5, menu_fac_rc(1).y + 5, 0);
+  CHECK(facChoice == 1, "clicking a faction button selects it");
+  step(2);
   click(SDL_BUTTON_LEFT, menu_map_rc(2).x + 5, menu_map_rc(2).y + 5, 0);   /* start the real game on the river map */
   Rc st = menu_start_rc();
   click(SDL_BUTTON_LEFT, st.x + 10, st.y + 10, 0);
@@ -308,7 +312,8 @@ int main(int argc, char **argv) {
   {
     const char *tmp = "/tmp/peakkk_smoke.sav";
     remove(tmp);
-    fogChoice = 0; mapChoice = 3; ui_start_game(2, 31337); step(3);
+    fogChoice = 0; mapChoice = 3; facChoice = 1; ui_start_game(2, 31337); step(3);
+    CHECK(g_get_faction(0) == 2 && g_get_faction(1) == 1, "the player gets the chosen faction and the AI the other");
     for (int i = 0; i < 60 * 40; i++) ui_update(1.0f / 60.0f);          /* play 40 seconds */
     float tSave = mTime; int uSave = nUnits, wood = (int)mTeam[0].res[1];
     CHECK(!save_exists(), "no save file exists yet");
@@ -317,10 +322,10 @@ int main(int argc, char **argv) {
     CHECK(sz > 1000 && sz < 400000, "the save file is small (zero-run encoded)");
     for (int i = 0; i < 60 * 30; i++) ui_update(1.0f / 60.0f);
     CHECK(mTime > tSave + 20, "the game moved on after saving");
-    mapChoice = 0; diffChoice = 0; fogChoice = 1;
+    mapChoice = 0; diffChoice = 0; fogChoice = 1; facChoice = 0;
     CHECK(ui_load_game() == 1, "F9 loads the save");
     CHECK(fabsf(mTime - tSave) < 0.05f && nUnits == uSave && (int)mTeam[0].res[1] == wood, "the loaded game is exactly the saved moment");
-    CHECK(mapChoice == 3 && diffChoice == 2 && fogChoice == 0, "map, difficulty and fog come back with the save");
+    CHECK(mapChoice == 3 && diffChoice == 2 && fogChoice == 0 && facChoice == 1, "map, difficulty and fog come back with the save");
     CHECK(screen == SCR_PLAY && inGame, "loading drops straight into the game");
     /* a damaged file is refused and the running game is untouched */
     f = fopen(tmp, "r+b"); fseek(f, 20, SEEK_SET); fputc(0xaa, f); fputc(0xbb, f); fseek(f, 3, SEEK_SET); fputc('X', f); fclose(f);

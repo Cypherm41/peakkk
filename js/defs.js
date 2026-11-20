@@ -147,6 +147,13 @@ const BUILDING_KEYS = Object.keys(BUILDING_DEFS);
 const NODE_KEYS = Object.keys(NODE_DEFS);
 const TECH_KEYS = Object.keys(TECHS);
 const DIFF_KEYS = Object.keys(DIFFS);
+/* Playable factions. Menu index i is core faction i + 1 (0 = classic, used by tests); the AI takes the other one.
+   The multipliers live in c/game.c (FAC); keep the descriptions in step with them. */
+const FACTIONS = {
+  rangers: { name: 'Ironwood Rangers', desc: 'Archers and spearmen cost 15% less and archers hit 20% harder. Cavalry is frailer and pricier.' },
+  legion:  { name: 'Sunhold Legion',   desc: 'Swordsmen +15% health and +10% damage, cavalry +10% health and +8% speed. Archers a little frailer.' },
+};
+const FACTION_KEYS = Object.keys(FACTIONS);
 /* Selectable maps. The order is the index passed to g_set_map in the C core. */
 const MAPS = {
   lake:   { name: 'Central Lake',  desc: 'Classic. A big lake splits the middle; build Ports and fight on the water.' },
@@ -187,7 +194,7 @@ const centerOf = (e) => (e.kind === 'unit' ? { x: e.x, y: e.y } : { x: e.x + e.w
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     MAP_W, MAP_H, TILE_W, TILE_H, MAX_POP, T_GRASS, T_WATER, T_SAND, FARM_RATE, FARM_SLOTS, TEAMS, RES_ICON, RES_LIST,
-    ATK_TYPES, CLASSES, NODE_DEFS, UNIT_DEFS, BUILDING_DEFS, TECHS, DIFFS, MAPS, MAP_KEYS, MUSIC, UNIT_KEYS, BUILDING_KEYS, NODE_KEYS, TECH_KEYS, DIFF_KEYS,
+    ATK_TYPES, CLASSES, NODE_DEFS, UNIT_DEFS, BUILDING_DEFS, TECHS, DIFFS, MAPS, MAP_KEYS, FACTIONS, FACTION_KEYS, MUSIC, UNIT_KEYS, BUILDING_KEYS, NODE_KEYS, TECH_KEYS, DIFF_KEYS,
     clamp, dist, canAfford, missingRes, centerOf,
   };
 }

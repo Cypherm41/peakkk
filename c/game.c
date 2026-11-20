@@ -108,7 +108,7 @@ typedef struct { int type; double x, y, z, vx, vy, vz, life, max; int color, amt
 typedef struct { int type, team; double x, y; int a, b; } Event;
 
 typedef struct {
-  double res[4]; int popUsed, popCap; int up[2]; double gatherMult, lastAlert;
+  double res[4]; int popUsed, popCap; int up[2]; double gatherMult, lastAlert; int fac;
 } Team;
 
 typedef struct {                    /* uniform view of any entity, used for targets */
@@ -129,6 +129,16 @@ static int nev, nproj, neff;
 static int idmap[MAXID];             /* id -> (kind << 20) | slot */
 static int nextId;
 static Team teams[2];
+/* factions: 0 = classic (neutral), 1 = Ironwood Rangers, 2 = Sunhold Legion. Per-unit multipliers. */
+typedef struct { double hp, atk, spd, cost; } FacMod;
+static const FacMod FAC[3][6] = {
+  /* builder, swordsman, spearman, archer, cavalry, warship */
+  { {1,1,1,1},{1,1,1,1},{1,1,1,1},{1,1,1,1},{1,1,1,1},{1,1,1,1} },
+  { {1,1,1,1},{1,0.95,1,1},{1.1,1,1,0.85},{1,1.2,1,0.85},{0.9,1,1,1.1},{1,1,1,1} },
+  { {1,1,1.1,1},{1.15,1.1,1,1.0},{1,1,1,1},{0.95,1,1,1},{1.1,1,1.08,1},{1.1,1,1,1} },
+};
+static int facSet[2];
+static const FacMod *facMod(int team, int type) { return &FAC[teams[team].fac][type]; }
 /* per-team game statistics for the end screen */
 enum { ST_TRAINED, ST_KILLS, ST_LOST, ST_BKILLS, ST_BLOST, ST_BUILT, ST_FOOD, ST_WOOD, ST_GOLD, ST_STONE, STAT_N };
 static int stats[2][STAT_N];
@@ -513,7 +523,7 @@ static int followPath(Unit *u, double dt) {
     u->stk = 0; u->sx = u->x; u->sy = u->y;
     if (moved < 0.25) { u->haspath = 0; return 0; }
   }
-  double step = UDEF[u->type].speed * dt;
+  double step = UDEF[u->type].speed * facMod(u->team, u->type)->spd * dt;
   while (step > 0 && u->pi < u->plen) {
     double wx = u->px[u->pi], wy = u->py[u->pi];
     double dx = wx - u->x, dy = wy - u->y, d = d_hypot(dx, dy);
@@ -550,7 +560,7 @@ static int approach(Unit *u, const TV *t, double reach, double dt) {
     if (distToTV(u, t) <= 3) {
       double cx, cy; centerTV(t, &cx, &cy);
       double dx = cx - u->x, dy = cy - u->y, d = d_hypot(dx, dy); if (d == 0) d = 1;
-      double st = d_min(d, UDEF[u->type].speed * dt);
+      double st = d_min(d, UDEF[u->type].speed * facMod(u->team, u->type)->spd * dt);
       double nx = u->x + dx / d * st, ny = u->y + dy / d * st;
       if (passFor(UDEF[u->type].water, fl(nx), fl(ny))) { u->x = nx; u->y = ny; u->moving = 1; u->face = (dx - dy) >= 0 ? 1 : -1; }
     }
@@ -568,7 +578,7 @@ static Unit *createUnit(int team, int type, double x, double y) {
   if (!id) return 0;
   Unit *u = &units[slot];
   __builtin_memset(u, 0, sizeof(Unit));
-  u->id = id; u->type = type; u->team = team; u->x = x; u->y = y; u->hp = u->maxHp = UDEF[type].hp;
+  u->id = id; u->type = type; u->team = team; u->x = x; u->y = y; u->hp = u->maxHp = UDEF[type].hp * facMod(team, type)->hp;
   u->face = team == 0 ? 1 : -1; u->anim = rnd() * 10; u->carryType = -1; u->gatherKind = -1; u->lastKind = -1;
   u->scan = rnd() * 0.5; u->ptx = -1; u->pty = -1; u->sx = -9999; u->sy = -9999;
   return u;
@@ -870,13 +880,15 @@ static int queueUnit(Bld *b, int type) {
   if (bd->trains[0] != type && bd->trains[1] != type) return ERR_CANTTRAIN;
   if (b->qlen >= 5) return ERR_QFULL;
   if (team->popUsed + d->pop > team->popCap) return team->popCap >= MAX_POP ? ERR_POPLIMIT : ERR_HOUSES;
-  int miss = missingRes(team->res, d->cost);
+  int cost[4]; double cm = facMod(b->team, type)->cost;
+  for (int k = 0; k < 4; k++) cost[k] = d->cost[k] > 0 ? (int)(d->cost[k] * cm + 0.5) : 0;
+  int miss = missingRes(team->res, cost);
   if (miss >= 0) return ERR_RES0 + miss;
-  payCost(team->res, d->cost);
+  payCost(team->res, cost);
   team->popUsed += d->pop;
   QItem *q = &b->q[b->qlen++];
   q->kind = 0; q->type = type; q->time = d->time;
-  for (int k = 0; k < 4; k++) q->cost[k] = d->cost[k];
+  for (int k = 0; k < 4; k++) q->cost[k] = cost[k];
   return ERR_NONE;
 }
 static void techCost(int tech, int lvl, int *cost) {
@@ -950,7 +962,7 @@ static void kill(const TV *t);
 
 static void damage(int akind, int atype, int aid, int ateam, const TV *t) {
   double atk; int atkType; const double *bonus = 0; int isSoldierUnit = 0;
-  if (akind == K_UNIT) { const UnitDef *ad = &UDEF[atype]; atk = ad->atk; atkType = ad->atkType; bonus = ad->bonus; isSoldierUnit = ad->soldier && atkType != 2; }
+  if (akind == K_UNIT) { const UnitDef *ad = &UDEF[atype]; atk = ad->atk * facMod(ateam, atype)->atk; atkType = ad->atkType; bonus = ad->bonus; isSoldierUnit = ad->soldier && atkType != 2; }
   else { const BldDef *bd = &BDEF[atype]; atk = bd->atk; atkType = bd->atkType; }
   Team *team = &teams[ateam];
   double dmg = atk;
@@ -1719,6 +1731,8 @@ static int fogSeesBld(const Bld *b) {
   return 0;
 }
 EXPORT("g_set_fog") void g_set_fog(int on) { fogOn = on != 0; }
+EXPORT("g_set_faction") void g_set_faction(int team, int f) { if (team >= 0 && team < 2) facSet[team] = f < 0 || f > 2 ? 0 : f; }
+EXPORT("g_get_faction") int g_get_faction(int team) { return team >= 0 && team < 2 ? teams[team].fac : 0; }
 EXPORT("g_fog") uint8_t *g_fog(void) { return fog; }
 
 /* --------------------------------- Update -------------------------------- */
@@ -1762,7 +1776,7 @@ EXPORT("g_init") void g_init(uint32_t seed, int diff, int aiMask) {
   for (int i = 0; i < 2; i++) {
     __builtin_memset(&teams[i], 0, sizeof(Team));
     teams[i].res[R_FOOD] = 300; teams[i].res[R_WOOD] = 300; teams[i].res[R_GOLD] = 150; teams[i].res[R_STONE] = 100;
-    teams[i].gatherMult = 1; teams[i].lastAlert = -99;
+    teams[i].gatherMult = 1; teams[i].lastAlert = -99; teams[i].fac = facSet[i];
   }
   generateMap();
   for (int i = 0; i < 2; i++) {

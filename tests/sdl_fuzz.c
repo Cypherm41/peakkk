@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
     SDL_SetModState(KMOD_NONE);
     ui_update(rf(0.001f, 0.12f) * (rnd() % 5 == 0 ? 8 : 1));
     if (n % 25 == 0) ui_draw();
-    if (screen == SCR_MENU && rnd() % 20 == 0) { mapChoice = (int)(rnd() % MAP_COUNT); fogChoice = (int)(rnd() & 1); ui_start_game((int)(rnd() % 3), (unsigned)rnd()); games++; }
+    if (screen == SCR_MENU && rnd() % 20 == 0) { mapChoice = (int)(rnd() % MAP_COUNT); fogChoice = (int)(rnd() & 1); facChoice = (int)(rnd() & 1); ui_start_game((int)(rnd() % 3), (unsigned)rnd()); games++; }
     if (overlayPanel == PANEL_END) { overlayPanel = PANEL_NONE; if (rnd() & 1) screen = SCR_MENU; }   /* like clicking Play Again, or dismissing the panel */
     if (n % 3000 == 2999) screen = SCR_MENU;                                       /* regularly return to the menu so restarts are fuzzed too */
     /* invariants of the UI state */

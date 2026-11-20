@@ -41,6 +41,7 @@ float *g_snap_effs(void);
 float *g_snap_events(void);
 float *g_snap_teams(void);
 uint8_t *g_terrain(void);
+void g_set_faction(int team, int f); int g_get_faction(int team);   /* 0 classic, 1 Ironwood Rangers, 2 Sunhold Legion; applies to the next g_init */
 void g_set_fog(int on);      /* 1 = fog of war for team 0 (applies to the next g_init; the snapshot then omits what team 0 cannot see) */
 uint8_t *g_fog(void);
 int *g_stats(void);          /* [team][g_stat_count()]: trained, kills, lost, bkills, blost, built, food, wood, gold, stone */

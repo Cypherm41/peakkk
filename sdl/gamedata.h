@@ -62,6 +62,15 @@ static const char *MAP_NAME[5] = {
   /* ponds */ "Pond Country",
   /* forest */ "Deep Forest",
 };
+static const char *FAC_NAME[2] = {
+  /* rangers */ "Ironwood Rangers",
+  /* legion */ "Sunhold Legion",
+};
+static const char *FAC_DESC[2] = {
+  /* rangers */ "Archers and spearmen cost 15% less and archers hit 20% harder. Cavalry is frailer and pricier.",
+  /* legion */ "Swordsmen +15% health and +10% damage, cavalry +10% health and +8% speed. Archers a little frailer.",
+};
+#define FAC_COUNT 2
 static const char *MAP_DESC[5] = {
   /* lake */ "Classic. A big lake splits the middle; build Ports and fight on the water.",
   /* plains */ "No water, wide open ground and sparse groves. Wood is scarce, armies move fast.",

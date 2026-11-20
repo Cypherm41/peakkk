@@ -55,8 +55,12 @@ class Game {
       _X.g_set_map(mapIdx);
       this.fogOn = opts.fog !== false;       // fog of war is on unless a caller (tests, bots) asks for the full view
       _X.g_set_fog(this.fogOn ? 1 : 0);
+      const fi = FACTION_KEYS.indexOf(opts.faction);            // unknown/absent = classic (no bonuses), as tests and bots expect
+      const pf = fi < 0 ? 0 : fi + 1, af = fi < 0 ? 0 : (fi ^ 1) + 1;
+      _X.g_set_faction(0, pf); _X.g_set_faction(1, af);
       _X.g_init(seed >>> 0, diffIdx, mask);
     }
+    this.faction = [_X.g_get_faction(0), _X.g_get_faction(1)];   // 0 classic, 1 Ironwood Rangers, 2 Sunhold Legion
     this.seed = seed; this.difficulty = DIFF_KEYS[diffIdx]; this.map = MAP_KEYS[mapIdx];
 
     this.units = []; this.buildings = []; this.nodes = []; this.projectiles = []; this.effects = []; this.events = [];
