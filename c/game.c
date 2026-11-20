@@ -120,6 +120,8 @@ typedef struct {
   int active, team; int diff;
   double t, next; int waveSize, waveId, waveStart, attacking; double portTry;
   int raidOn; double raidUntil, raidNext;    /* cavalry raids on the enemy's workers */
+  int eCav, eArcher, eSpear, eSold;          /* last seen enemy army composition (fair AI under fog of war) */
+  int scouting; double scoutX, scoutY;       /* where the army looks for enemy buildings it has not found */
   int hasRally; double rx, ry;
 } AI;
 
@@ -1346,11 +1348,44 @@ static int aiTryBuild(AI *ai, int type, double cx, double cy, int rmin, int rmax
   return placeBuilding(ai->team, type, px, py, one, 1) > 0;
 }
 
+/* Fair AI: with fog of war on, the AI only knows what its own units and buildings can see (same radii as the player's
+   fog), plus the enemy's starting town center, and it remembers the enemy buildings it has seen. */
+static int fogOn;
+static int aiFair, aiFairForce = -1;      /* aiFairForce: -1 follows the fog setting, 0/1 overrides (bots, tests) */
+static int aiKnownB[2][MAXB];                       /* per AI team: id of each remembered enemy building slot */
+static double aiSrcX[MAXU + MAXB], aiSrcY[MAXU + MAXB], aiSrcR2[MAXU + MAXB]; static int aiNSrc;
+static void aiScan(int team) {
+  aiNSrc = 0;
+  for (int i = 0; i < MAXU; i++) { const Unit *u = &units[i]; if (u->id && !u->dead && u->team == team) { aiSrcX[aiNSrc] = u->x; aiSrcY[aiNSrc] = u->y; aiSrcR2[aiNSrc++] = 49.0; } }
+  for (int i = 0; i < MAXB; i++) {
+    const Bld *b = &blds[i];
+    if (!b->id || b->dead || b->team != team) continue;
+    double r = !b->done ? 4.0 : 6.0 + (b->w + b->h) * 0.4 + (b->type == B_TOWER ? 3.0 : 0.0);
+    aiSrcX[aiNSrc] = b->x + b->w / 2.0; aiSrcY[aiNSrc] = b->y + b->h / 2.0; aiSrcR2[aiNSrc++] = r * r;
+  }
+}
+static int aiCanSee(double x, double y) {
+  for (int i = 0; i < aiNSrc; i++) { double dx = x - aiSrcX[i], dy = y - aiSrcY[i]; if (dx * dx + dy * dy <= aiSrcR2[i]) return 1; }
+  return 0;
+}
+static int aiKnowsUnit(const AI *ai, const Unit *u) { return !aiFair || aiCanSee(u->x, u->y); }
+static int aiKnowsBld(const AI *ai, int slot) { return !aiFair || (aiKnownB[ai->team][slot] == blds[slot].id && blds[slot].id); }
+static void aiLook(const AI *ai) {                 /* refresh sight sources and remember enemy buildings in view */
+  if (!aiFair) return;
+  aiScan(ai->team);
+  for (int i = 0; i < MAXB; i++) {
+    const Bld *b = &blds[i];
+    if (!b->id || b->dead || b->team == ai->team) continue;
+    if (aiKnownB[ai->team][i] == b->id) continue;
+    if (aiCanSee(b->x + b->w / 2.0, b->y + b->h / 2.0) || (b->type == B_TOWNCENTER && ai->t < 5)) aiKnownB[ai->team][i] = b->id;
+  }
+}
+
 static double aiPickTarget(const AI *ai, double fx, double fy, double *ox, double *oy) {
   int found = 0; double bd = 1e9;
   for (int i = 0; i < MAXB; i++) {
     const Bld *b = &blds[i];
-    if (!b->id || b->dead || b->team == ai->team) continue;
+    if (!b->id || b->dead || b->team == ai->team || !aiKnowsBld(ai, i)) continue;
     double cx = b->x + b->w / 2.0, cy = b->y + b->h / 2.0;
     double d = d_hypot(fx - cx, fy - cy) - (b->type == B_TOWNCENTER ? 6 : 0);
     if (d < bd) { bd = d; *ox = cx; *oy = cy; found = 1; }
@@ -1358,7 +1393,7 @@ static double aiPickTarget(const AI *ai, double fx, double fy, double *ox, doubl
   if (found) return 1;
   for (int i = 0; i < MAXU; i++) {
     const Unit *u = &units[i];
-    if (!u->id || u->dead || u->team == ai->team) continue;
+    if (!u->id || u->dead || u->team == ai->team || !aiKnowsUnit(ai, u)) continue;
     double d = d_hypot(fx - u->x, fy - u->y);
     if (d < bd) { bd = d; *ox = u->x; *oy = u->y; found = 1; }
   }
@@ -1371,6 +1406,7 @@ static int aiNearestPrey(int team, double fx, double fy, double *ox, double *oy)
   for (int i = 0; i < MAXU; i++) {
     const Unit *u = &units[i];
     if (!u->id || u->dead || u->team == team || u->type != U_BUILDER) continue;
+    if (aiFair && !aiCanSee(u->x, u->y)) continue;
     double d = d_hypot(fx - u->x, fy - u->y);
     if (d < bd) { bd = d; *ox = u->x; *oy = u->y; found = 1; }
   }
@@ -1380,6 +1416,7 @@ static int aiNearestPrey(int team, double fx, double fy, double *ox, double *oy)
 static void aiThink(AI *ai) {
   const DiffDef *df = &DIFFD[ai->diff];
   int id = ai->team; Team *team = &teams[id]; double *R = team->res;
+  aiLook(ai);
   static Unit *builders[MAXU], *army[MAXU], *ships[MAXU], *raiders[MAXU];
   int nR = 0, nArcher = 0, nCav = 0;
   static Bld *myB[MAXB];
@@ -1508,9 +1545,13 @@ static void aiThink(AI *ai) {
   int eCav = 0, eArcher = 0, eSpear = 0, eSold = 0;
   for (int i = 0; i < MAXU; i++) {
     const Unit *e = &units[i];
-    if (!e->id || e->dead || e->team == id || !UDEF[e->type].soldier || UDEF[e->type].water) continue;
+    if (!e->id || e->dead || e->team == id || !UDEF[e->type].soldier || UDEF[e->type].water || !aiKnowsUnit(ai, e)) continue;
     eSold++;
     if (e->type == U_CAVALRY) eCav++; else if (e->type == U_ARCHER) eArcher++; else if (e->type == U_SPEARMAN) eSpear++;
+  }
+  if (aiFair) {                                     /* remember the last army composition actually seen */
+    if (eSold > 0) { ai->eCav = eCav; ai->eArcher = eArcher; ai->eSpear = eSpear; ai->eSold = eSold; }
+    eCav = ai->eCav; eArcher = ai->eArcher; eSpear = ai->eSpear; eSold = ai->eSold;
   }
   int counter = ai->diff >= 1 && eSold >= 6;
 
@@ -1566,6 +1607,13 @@ static void aiThink(AI *ai) {
   /* offense */
   double tx = 0, ty = 0;
   int haveTarget = (int)aiPickTarget(ai, bcx, bcy, &tx, &ty);
+  if (!haveTarget && aiFair) {                      /* nothing known to attack: head for the enemy's start, then sweep the map */
+    int arrived = 0;
+    for (int i = 0; i < nA; i++) if (d_hypot(army[i]->x - ai->scoutX, army[i]->y - ai->scoutY) < 6) { arrived = 1; break; }
+    if (!ai->scouting) { ai->scouting = 1; ai->scoutX = base_x[1 - id]; ai->scoutY = base_y[1 - id]; }
+    else if (arrived) { ai->scoutX = 6 + rnd() * (MAP_W - 12); ai->scoutY = 6 + rnd() * (MAP_H - 12); }
+    tx = ai->scoutX; ty = ai->scoutY; haveTarget = 1;
+  } else if (haveTarget) ai->scouting = 0;
   static int ids[MAXORD];
   if (!ai->attacking && nA >= ai->waveSize && haveTarget) {
     ai->attacking = 1; ai->waveId++; ai->waveStart = nA;
@@ -1700,7 +1748,7 @@ static void separate(double dt) {
  * effect that is not in sight, and nodes nobody has explored yet, so the front ends cannot draw or pick what they must
  * not see. The AI is not restricted (it plays by the real state). Off by default; the front ends turn it on. */
 #define B_STRIDE 34
-static int fogOn;
+
 static float ghostRow[MAXB][B_STRIDE]; static int ghostId[MAXB];   /* last-seen enemy buildings (fog of war) */
 static uint8_t fog[MAP_W * MAP_H];
 static void fogReveal(double cx, double cy, double r) {
@@ -1730,6 +1778,7 @@ static int fogSeesBld(const Bld *b) {
   for (int j = 0; j < b->h; j++) for (int i = 0; i < b->w; i++) if (fogSees(b->x + i, b->y + j)) return 1;
   return 0;
 }
+EXPORT("g_set_ai_fair") void g_set_ai_fair(int v) { aiFairForce = v < 0 ? -1 : v != 0; }
 EXPORT("g_set_fog") void g_set_fog(int on) { fogOn = on != 0; }
 EXPORT("g_set_faction") void g_set_faction(int team, int f) { if (team >= 0 && team < 2) facSet[team] = f < 0 || f > 2 ? 0 : f; }
 EXPORT("g_get_faction") int g_get_faction(int team) { return team >= 0 && team < 2 ? teams[team].fac : 0; }
@@ -1778,6 +1827,8 @@ EXPORT("g_init") void g_init(uint32_t seed, int diff, int aiMask) {
     teams[i].res[R_FOOD] = 300; teams[i].res[R_WOOD] = 300; teams[i].res[R_GOLD] = 150; teams[i].res[R_STONE] = 100;
     teams[i].gatherMult = 1; teams[i].lastAlert = -99; teams[i].fac = facSet[i];
   }
+  aiFair = aiFairForce >= 0 ? aiFairForce : fogOn;
+  __builtin_memset(aiKnownB, 0, sizeof aiKnownB);
   generateMap();
   for (int i = 0; i < 2; i++) {
     Bld *tc = createBuilding(i, B_TOWNCENTER, base_x[i] - 1, base_y[i] - 1, 1);
@@ -1928,7 +1979,7 @@ EXPORT("g_stat_count") int g_stat_count(void) { return STAT_N; }
  * (path search buffers, snapshot arrays) is not saved: it is rebuilt on demand. */
 #define SAVE_LIST(X) X(rng_state) X(units) X(blds) X(nodes) X(projs) X(effs) X(evs) X(nev) X(nproj) X(neff) X(idmap) X(nextId) \
   X(teams) X(ais) X(game_time) X(win_check) X(path_budget) X(winner) X(difficulty) X(terrain) X(lake) X(shade) X(occ) X(mapType) \
-  X(fogOn) X(fog) X(ghostRow) X(ghostId) X(stats)
+  X(fogOn) X(aiFair) X(aiKnownB) X(fog) X(ghostRow) X(ghostId) X(stats)
 #define SAVE_SIZE_ADD(x) + sizeof(x)
 #define SAVE_HEAD 16
 enum { SAVE_PAYLOAD = 0 SAVE_LIST(SAVE_SIZE_ADD) };

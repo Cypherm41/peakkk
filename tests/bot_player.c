@@ -13,6 +13,7 @@
 #include <string.h>
 #include "model.h"
 static int botFac, aiFac;             /* factions: 0 classic, 1 Ironwood Rangers, 2 Sunhold Legion */
+static int botFair = -1;               /* -1 AI follows fog (off for bots), 0/1 forces the fair AI */
 static int botMap;                    /* terrain for every game: 0 lake, 1 plains, 2 river, 3 ponds, 4 forest */
 
 typedef struct { const char *name; int builders, attackAt, barracks, archery, stable, smith, towers; } Strat;
@@ -241,7 +242,7 @@ typedef struct { int winner; float time; int myArmy, enArmy, myBlds, enBlds, pea
 
 static Result play(int seed, int diff, const Strat *strat, float maxMinutes) {
   S = strat; attacking = 0; lastWaveOrder = -100;
-  g_set_map(botMap); g_set_faction(0, botFac); g_set_faction(1, aiFac);
+  g_set_map(botMap); g_set_faction(0, botFac); g_set_faction(1, aiFac); g_set_ai_fair(botFair);
   g_init((unsigned)seed, diff, 1 << 1);
   model_sync();
   Result r = { -1, 0, 0, 0, 0, 0, 0 };
@@ -273,6 +274,7 @@ int main(int argc, char **argv) {
   const char *dsel = argc > 4 ? argv[4] : "all";
   botMap = argc > 5 ? atoi(argv[5]) : 0;
   botFac = argc > 6 ? atoi(argv[6]) : 0; aiFac = argc > 7 ? atoi(argv[7]) : 0;
+  botFair = argc > 8 ? atoi(argv[8]) : -1;
   if (!model_init()) { printf("snapshot layout mismatch\n"); return 2; }
   static const char *DN[3] = { "easy", "normal", "hard" };
   printf("%-6s %-5s %-5s %-8s %7s %9s %9s %9s\n", "diff", "strat", "seed", "result", "minutes", "peakArmy", "army/en", "blds/en");

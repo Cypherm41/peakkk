@@ -237,6 +237,20 @@ static void run_ai_vs_ai(double minutes, uint32_t seed, int diff) {
   for (int t = 0; t < 2; t++) CHECK(teams[t].popUsed >= 0 && teams[t].popUsed <= MAX_POP + 5, "population in range");
 }
 
+/* a fair AI must still find and destroy a building that is far from the Green base and out of its sight */
+static void run_hidden(int diff) {
+  g_set_fog(1); g_set_ai_fair(1);
+  g_init(777, diff, 2);
+  int hx = 30, hy = 6, ok = 0;
+  for (int t = 0; t < 40 && !ok; t++) { Bld *h = createBuilding(0, B_HOUSE, hx, hy + t, 1); if (h) { ok = 1; hy += t; } }
+  CHECK(ok, "hidden house placed");
+  int knew0 = 0; for (int i = 0; i < MAXB; i++) if (blds[i].id && blds[i].team == 0 && aiKnownB[1][i] == blds[i].id) knew0++;
+  for (int i = 0; i < 45 * 600 && winner < 0; i++) g_update(0.1);
+  printf("fair AI vs passive player with a hidden house: ended %.1f min, winner=%s (known at start: %d)\n", game_time / 60, winner < 0 ? "none" : winner ? "Yellow" : "Green", knew0);
+  CHECK(winner == 1, "the fair AI scouts out and destroys every building");
+  g_set_ai_fair(-1); g_set_fog(0);
+}
+
 static void run_passive(int diff) {
   g_init(777, diff, 2);                       /* only Yellow is AI-controlled; Green does nothing */
   double firstPush = -1;
@@ -296,6 +310,7 @@ int main(int argc, char **argv) {
   run_ai_vs_ai(minutes, seed, 1);
   run_ai_vs_ai(minutes, seed + 1, 2);
   for (int d = 0; d < 3; d++) run_passive(d);
+  run_hidden(2);
   printf(failures ? "\n%d FAILURE(S)\n" : "\nALL OK\n", failures);
   return failures ? 1 : 0;
 }
