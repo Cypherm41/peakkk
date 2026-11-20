@@ -133,11 +133,11 @@ static int nextId;
 static Team teams[2];
 /* factions: 0 = classic (neutral), 1 = Ironwood Rangers, 2 = Sunhold Legion. Per-unit multipliers. */
 typedef struct { double hp, atk, spd, cost; } FacMod;
-static const FacMod FAC[3][6] = {
-  /* builder, swordsman, spearman, archer, cavalry, warship */
-  { {1,1,1,1},{1,1,1,1},{1,1,1,1},{1,1,1,1},{1,1,1,1},{1,1,1,1} },
-  { {1,1,1,1},{1,0.95,1,1},{1.1,1,1,0.85},{1,1.2,1,0.85},{0.9,1,1,1.1},{1,1,1,1} },
-  { {1,1,1.1,1},{1.15,1.1,1,1.0},{1,1,1,1},{0.95,1,1,1},{1.1,1,1.08,1},{1.1,1,1,1} },
+static const FacMod FAC[3][NUM_UNIT] = {
+  /* builder, swordsman, spearman, archer, cavalry, warship, warden, catapult */
+  { {1,1,1,1},{1,1,1,1},{1,1,1,1},{1,1,1,1},{1,1,1,1},{1,1,1,1},{1,1,1,1},{1,1,1,1} },
+  { {1,1,1,1},{1,0.95,1,1},{1.1,1,1,0.85},{1,1.2,1,0.85},{0.9,1,1,1.1},{1,1,1,1},{1,1,1,1},{1,1,1,1} },
+  { {1,1,1.1,1},{1.15,1.1,1,1.0},{1,1,1,1},{0.95,1,1,1},{1.1,1,1.08,1},{1.1,1,1,1},{1,1,1,1},{1,1,1,1} },
 };
 static int facSet[2];
 static const FacMod *facMod(int team, int type) { return &FAC[teams[team].fac][type]; }
@@ -879,7 +879,8 @@ static int queueUnit(Bld *b, int type) {
   const UnitDef *d = &UDEF[type]; Team *team = &teams[b->team];
   if (!b->done || b->dead) return ERR_NOTREADY;
   const BldDef *bd = &BDEF[b->type];
-  if (bd->trains[0] != type && bd->trains[1] != type) return ERR_CANTTRAIN;
+  if (bd->trains[0] != type && bd->trains[1] != type && bd->trains[2] != type) return ERR_CANTTRAIN;
+  if (d->faction && d->faction != team->fac) return ERR_CANTTRAIN;     /* faction units */
   if (b->qlen >= 5) return ERR_QFULL;
   if (team->popUsed + d->pop > team->popCap) return team->popCap >= MAX_POP ? ERR_POPLIMIT : ERR_HOUSES;
   int cost[4]; double cm = facMod(b->team, type)->cost;
@@ -1418,7 +1419,7 @@ static void aiThink(AI *ai) {
   int id = ai->team; Team *team = &teams[id]; double *R = team->res;
   aiLook(ai);
   static Unit *builders[MAXU], *army[MAXU], *ships[MAXU], *raiders[MAXU];
-  int nR = 0, nArcher = 0, nCav = 0;
+  int nR = 0, nArcher = 0, nCav = 0, nWarden = 0, nCat = 0;
   static Bld *myB[MAXB];
   int nB = 0, nbld = 0, nA = 0, nS = 0;
   int nbType[NUM_BLD] = {0}, ndType[NUM_BLD] = {0};
@@ -1431,7 +1432,7 @@ static void aiThink(AI *ai) {
     if (b->done) { ndType[b->type]++; if (b->type == B_TOWNCENTER && !tc) tc = b; }
     if (!b->done && b->type != B_HOUSE && b->type != B_FARM && b->type != B_STOREHOUSE) buildingNow++;
     if (!b->done && b->type == B_HOUSE) housesBuilding++;
-    if (BDEF[b->type].trains[0] >= 0 && b->type != B_TOWNCENTER) prod++;
+    if (BDEF[b->type].trains[0] >= 0 && b->type != B_TOWNCENTER && b->type != B_BLACKSMITH) prod++;
     if (b->type == B_FARM) farmsTotal++;
     for (int q = 0; q < b->qlen; q++) if (b->q[q].kind == 0 && b->q[q].type == U_BUILDER) queuedB++;
   }
@@ -1444,7 +1445,7 @@ static void aiThink(AI *ai) {
     else if (u->raid && UDEF[u->type].soldier) raiders[nR++] = u;
     else if (UDEF[u->type].soldier && !UDEF[u->type].water) {
       army[nA++] = u;
-      switch (u->type) { case U_SWORDSMAN: nSword++; break; case U_SPEARMAN: nSpear++; break; case U_ARCHER: nArcher++; break; case U_CAVALRY: nCav++; break; default: break; }
+      switch (u->type) { case U_SWORDSMAN: nSword++; break; case U_SPEARMAN: nSpear++; break; case U_ARCHER: nArcher++; break; case U_CAVALRY: nCav++; break; case U_WARDEN: nWarden++; break; case U_CATAPULT: nCat++; break; default: break; }
     }
     if (u->type == U_WARSHIP) ships[nS++] = u;
   }
@@ -1556,6 +1557,9 @@ static void aiThink(AI *ai) {
   int counter = ai->diff >= 1 && eSold >= 6;
 
   /* training */
+  int wantCat = 0;                                                                    /* Sunhold: keep money for the next catapult */
+  if (team->fac == 2 && ai->diff >= 1 && nA >= 8 && nCat < 2 + ai->waveId && nCat < 5)
+    for (int i = 0; i < nbld; i++) if (myB[i]->type == B_BLACKSMITH && myB[i]->done && myB[i]->qlen == 0) wantCat = 1;
   for (int i = 0; i < nbld; i++) {
     Bld *b = myB[i];
     if (!b->done || b->type == B_TOWNCENTER || BDEF[b->type].trains[0] < 0 || b->qlen >= 2) continue;
@@ -1564,9 +1568,21 @@ static void aiThink(AI *ai) {
       type = nSword <= nSpear ? U_SWORDSMAN : U_SPEARMAN;
       if (counter) { if (eCav * 3 >= eSold) type = U_SPEARMAN; else if (eSpear * 2 >= eSold) type = U_SWORDSMAN; }   /* spears stop cavalry, swords beat spears */
     }
-    else if (b->type == B_ARCHERY) { type = U_ARCHER; if (counter && eCav * 2 >= eSold && nArcher >= 4) type = -1; }  /* no more archers into a cavalry army */
+    else if (b->type == B_ARCHERY) {
+      type = U_ARCHER; if (counter && eCav * 2 >= eSold && nArcher >= 4) type = -1;     /* no more archers into a cavalry army */
+      if (team->fac == 1 && ai->diff >= 1) {                                          /* Ironwood: wardens screen the archers, and answer cavalry */
+        if (counter && eCav * 3 >= eSold) type = U_WARDEN;
+        else if (nWarden * 4 < nArcher) type = U_WARDEN;
+      }
+    }
     else if (b->type == B_STABLE) { type = U_CAVALRY; if (counter && eSpear * 2 >= eSold && nCav >= 3) type = -1; }  /* nor cavalry into spears */
+    else if (b->type == B_BLACKSMITH) {                                               /* Sunhold: a couple of catapults per wave */
+      if (team->fac == 2 && ai->diff >= 1 && nA >= 8 && nCat < 2 + ai->waveId && nCat < 5 && b->qlen == 0) type = U_CATAPULT;
+    }
     else if (b->type == B_PORT) { if (nS + b->qlen < (id == 1 ? 3 : 2)) type = U_WARSHIP; }
+    if (wantCat && type >= 0 && b->type != B_BLACKSMITH) {
+      for (int k = 0; k < 4; k++) if (UDEF[U_CATAPULT].cost[k] > 0 && UDEF[type].cost[k] > 0 && R[k] < UDEF[U_CATAPULT].cost[k] + UDEF[type].cost[k]) { type = -1; break; }
+    }
     if (type >= 0 && saveFor >= 0 && nA >= 12) {                       /* leave enough of what the planned building needs */
       for (int k = 0; k < 4; k++) if (BDEF[saveFor].cost[k] > 0 && UDEF[type].cost[k] > 0 && R[k] < BDEF[saveFor].cost[k] + UDEF[type].cost[k]) { type = -1; break; }
     }
@@ -1778,6 +1794,8 @@ static int fogSeesBld(const Bld *b) {
   for (int j = 0; j < b->h; j++) for (int i = 0; i < b->w; i++) if (fogSees(b->x + i, b->y + j)) return 1;
   return 0;
 }
+/* test hook: put a unit on the map (no cost, no population change); returns its id or 0 */
+EXPORT("g_debug_spawn") int g_debug_spawn(int team, int type, double x, double y) { if (team < 0 || team > 1 || type < 0 || type >= NUM_UNIT) return 0; Unit *u = createUnit(team, type, x, y); return u ? u->id : 0; }
 EXPORT("g_set_ai_fair") void g_set_ai_fair(int v) { aiFairForce = v < 0 ? -1 : v != 0; }
 EXPORT("g_set_fog") void g_set_fog(int on) { fogOn = on != 0; }
 EXPORT("g_set_faction") void g_set_faction(int team, int f) { if (team >= 0 && team < 2) facSet[team] = f < 0 || f > 2 ? 0 : f; }

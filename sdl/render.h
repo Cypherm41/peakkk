@@ -393,6 +393,34 @@ static void draw_unit(const FUnit *u, int selected) {
       if (u->cd > 0.8f || sw > 0) l_line(5 - pull, -11 - bob, 13, -11 - bob, 1.2f, 0xcbb27a, 1);
       break;
     }
+    case U_WARDEN: {
+      u_legs(t, mv, 0x2f3a22);
+      l_rect(-4.2f, -15 - bob, 8.4f, 10, TC, 1);
+      l_tri(-4, -16 - bob, -9, -4 - bob, -3, -5 - bob, 0x3f6b2c, 1);
+      u_head(-18.5f - bob, 0);
+      l_tri(-4.6f, -17 - bob, 0, -26 - bob, 4.6f, -17 - bob, 0x3f6b2c, 1);
+      float th = sw * 8;
+      l_line(2 + th * 0.2f, -4, 8 + th * 0.9f, -22 + th * 0.1f, 1.6f, 0x8a6a3a, 1);
+      l_tri(8 + th * 0.9f, -22 + th * 0.1f, 13 + th * 0.9f, -23.5f + th * 0.1f, 8.5f + th * 0.9f, -25 + th * 0.1f, 0xe4eaee, 1);
+      l_line(-2, -9 - bob, 4, -9 - bob, 1.2f, 0x6b4a2a, 1);
+      break;
+    }
+    case U_CATAPULT: {
+      float wob = mv ? sinf(t * 8) * 0.6f : 0;
+      l_rect(-15, -9 + wob, 30, 5, 0x5a3d1e, 1);
+      l_rect(-15, -9 + wob, 30, 1.6f, TC, 1);
+      for (int k = 0; k < 2; k++) {
+        float wx = k ? 10.0f : -10.0f, a = mv ? t * 4 : 0;
+        l_ellipse(wx, -3 + wob, 5, 5, 0x3b2412, 1); l_stroke_ellipse(wx, -3 + wob, 5, 5, 1, 0xa07a44, 1);
+        l_line(wx - cosf(a) * 5, -3 + wob - sinf(a) * 5, wx + cosf(a) * 5, -3 + wob + sinf(a) * 5, 1, 0xa07a44, 1);
+      }
+      l_line(-6, -9, -6, -17, 2.4f, 0x7a5a30, 1); l_line(8, -9, 8, -17, 2.4f, 0x7a5a30, 1); l_line(-6, -17, 8, -17, 2.4f, 0x7a5a30, 1);
+      mx_push(); mx_translate(1, -17); mx_rotate(-0.9f + sw * 2.2f);
+      l_line(0, 0, -4, 17, 2.4f, 0x8a6a3a, 1); l_line(0, 0, 3, -16, 2.4f, 0x8a6a3a, 1);
+      l_ellipse(3, -17, 3, 3, sw > 0.1f ? 0x2b2b2b : 0x555555, 1);
+      mx_pop();
+      break;
+    }
     case U_CAVALRY: {
       float gal = mv ? sinf(t * 10) : 0, ag = fabsf(gal);
       static const float legsx[4][2] = { { -8, 0 }, { -5, 1.6f }, { 6, 0.8f }, { 9, 2.4f } };

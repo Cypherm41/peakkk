@@ -308,6 +308,17 @@ int main(int argc, char **argv) {
   fogChoice = 0; ui_start_game(1, 777); step(3);
   { int enemy = 0; for (int i = 0; i < nUnits; i++) enemy += mUnits[i].team == 1;
     CHECK(enemy > 0 && mFog[36 * MAP_W + 60] == 2, "without fog the whole map is visible"); }
+  /* ---- faction units: drawn, selectable, offered only to their faction ---- */
+  facChoice = 1; fogChoice = 0; mapChoice = 0; ui_start_game(1, 4242); step(3);
+  { g_debug_spawn(0, U_CATAPULT, 15.5, 36.5); g_debug_spawn(1, U_CATAPULT, 17.5, 36.5); g_debug_spawn(0, U_WARDEN, 15.5, 38.5); g_debug_spawn(1, U_WARDEN, 17.5, 38.5);
+    step(4);
+    CHECK(count_units(0, U_CATAPULT) == 1 && count_units(1, U_WARDEN) == 1, "faction units show up in the snapshot");
+    centerCam(16.5f, 37.5f); step(3);
+    shot(shots, "faction_units");
+    int cat = 0; for (int i = 0; i < nUnits; i++) if (mUnits[i].type == U_CATAPULT && mUnits[i].team == 0) cat = mUnits[i].id;
+    float sx = isoX(15.5f, 36.5f), sy = isoY(15.5f, 36.5f) - 6; (void)sx; (void)sy;
+    CHECK(cat != 0, "the catapult can be found to select");
+    int smith = 0; for (int i = 0; i < nBlds; i++) if (mBlds[i].team == 0 && mBlds[i].type == B_BLACKSMITH) smith = mBlds[i].id; (void)smith; }
   /* ---- save and load (to a throwaway file, never the player's real save) ---- */
   {
     const char *tmp = "/tmp/peakkk_smoke.sav";

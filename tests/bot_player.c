@@ -179,8 +179,9 @@ static void production(const FBld *tc) {
     const FBld *b = &mBlds[i];
     if (b->team != 0 || !b->done) continue;
     if (b->type == B_BARRACKS) train(b, (en_cav * 2 > sw + sp || sp < sw) ? U_SPEARMAN : U_SWORDSMAN, 2), (void)en_arch;
-    else if (b->type == B_ARCHERY) train(b, U_ARCHER, 2);
+    else if (b->type == B_ARCHERY) train(b, botFac == 1 && cnt_units(0, U_WARDEN) * 4 < cnt_units(0, U_ARCHER) ? U_WARDEN : U_ARCHER, 2);
     else if (b->type == B_STABLE) train(b, U_CAVALRY, 1);
+    else if (b->type == B_BLACKSMITH && b->qlen == 0 && botFac == 2 && cnt_soldiers(0) >= 10 && cnt_units(0, U_CATAPULT) < 4) train(b, U_CATAPULT, 1);
     else if (b->type == B_BLACKSMITH && b->qlen == 0 && B >= 14) {
       int w = mTeam[0].upWeapons + g_tech_pending(0, TECH_WEAPONS), a = mTeam[0].upArmor + g_tech_pending(0, TECH_ARMOR);
       int t = w <= a ? TECH_WEAPONS : TECH_ARMOR, lvl = t == TECH_WEAPONS ? w : a;

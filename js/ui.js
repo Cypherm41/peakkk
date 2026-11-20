@@ -507,6 +507,35 @@ function drawUnit(u, selected) {
       if (u.cd > 0.8 || sw > 0) line(5 - pull, -11 - bob, 13, -11 - bob, '#cbb27a', 1.2);
       break;
     }
+    case 'warden': {
+      legs(t, mv, '#2f3a22');
+      ctx.fillStyle = T.color; ctx.fillRect(-4.2, -15 - bob, 8.4, 10);
+      ctx.fillStyle = '#3f6b2c'; ctx.beginPath(); ctx.moveTo(-4, -16 - bob); ctx.lineTo(-9, -4 - bob); ctx.lineTo(-3, -5 - bob); ctx.closePath(); ctx.fill();   // leaf cloak
+      head(-18.5 - bob, false);
+      ctx.fillStyle = '#3f6b2c'; ctx.beginPath(); ctx.moveTo(-4.6, -17 - bob); ctx.lineTo(0, -26 - bob); ctx.lineTo(4.6, -17 - bob); ctx.closePath(); ctx.fill();   // hood
+      const th = sw * 8;
+      line(2 + th * 0.2, -4, 8 + th * 0.9, -22 + th * 0.1, '#8a6a3a', 1.6);
+      ctx.fillStyle = '#e4eaee'; ctx.beginPath(); ctx.moveTo(8 + th * 0.9, -22 + th * 0.1); ctx.lineTo(13 + th * 0.9, -23.5 + th * 0.1); ctx.lineTo(8.5 + th * 0.9, -25 + th * 0.1); ctx.fill();
+      line(-2, -9 - bob, 4, -9 - bob, '#6b4a2a', 1.2);
+      break;
+    }
+    case 'catapult': {
+      const wob = mv ? Math.sin(t * 8) * 0.6 : 0;
+      ctx.fillStyle = '#5a3d1e'; ctx.fillRect(-15, -9 + wob, 30, 5);              // frame
+      ctx.fillStyle = T.color; ctx.fillRect(-15, -9 + wob, 30, 1.6);
+      for (const wx of [-10, 10]) {
+        ctx.fillStyle = '#3b2412'; ctx.beginPath(); ctx.arc(wx, -3 + wob, 5, 0, 6.3); ctx.fill();
+        ctx.strokeStyle = '#a07a44'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(wx, -3 + wob, 5, 0, 6.3); ctx.stroke();
+        const a = mv ? t * 4 : 0; line(wx - Math.cos(a) * 5, -3 + wob - Math.sin(a) * 5, wx + Math.cos(a) * 5, -3 + wob + Math.sin(a) * 5, '#a07a44', 1);
+      }
+      line(-6, -9, -6, -17, '#7a5a30', 2.4); line(8, -9, 8, -17, '#7a5a30', 2.4); line(-6, -17, 8, -17, '#7a5a30', 2.4);
+      const arm = -0.9 + sw * 2.2;                                                   // swings forward when it fires
+      ctx.save(); ctx.translate(1, -17); ctx.rotate(arm);
+      line(0, 0, -4, 17, '#8a6a3a', 2.4); line(0, 0, 3, -16, '#8a6a3a', 2.4);
+      ctx.fillStyle = sw > 0.1 ? '#2b2b2b' : '#555'; ctx.beginPath(); ctx.arc(3, -17, 3, 0, 6.3); ctx.fill();
+      ctx.restore();
+      break;
+    }
     case 'cavalry': {
       const gal = mv ? Math.sin(t * 10) : 0;
       ctx.strokeStyle = '#3b2412'; ctx.lineWidth = 2.6; ctx.lineCap = 'round';
@@ -920,6 +949,7 @@ function getCommands() {
     let i = 0;
     for (const type of b.def.trains || []) {
       const d = UNIT_DEFS[type];
+      if (d.faction && FACTION_KEYS.indexOf(d.faction) + 1 !== game.faction[0]) continue;      // faction-only units
       const popOk = team.popUsed + d.pop <= team.popCap;
       const bonus = d.bonus ? ' · Bonus vs ' + Object.keys(d.bonus).join(', ') : '';
       cmds[i++] = {

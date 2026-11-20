@@ -2,21 +2,25 @@
 #ifndef GAMEDATA_H
 #define GAMEDATA_H
 
-static const char *UNIT_NAME[6] = {
+static const char *UNIT_NAME[8] = {
   /* builder */ "Builder",
   /* swordsman */ "Swordsman",
   /* spearman */ "Spearman",
   /* archer */ "Archer",
   /* cavalry */ "Cavalry",
   /* warship */ "Warship",
+  /* warden */ "Warden",
+  /* catapult */ "Catapult",
 };
-static const char *UNIT_DESC[6] = {
+static const char *UNIT_DESC[8] = {
   /* builder */ "Gathers wood, food, gold and stone, builds and repairs. Weak in a fight.",
   /* swordsman */ "Sturdy melee infantry. Strong against spearmen and buildings, weak to archers.",
   /* spearman */ "Cheap infantry with a long reach. Devastating against cavalry; loses to swordsmen.",
   /* archer */ "Ranged attacker that shreds infantry from a distance. Fragile and weak to cavalry.",
   /* cavalry */ "Fast mounted knight. Runs down archers and builders; spearmen are its nightmare.",
   /* warship */ "Lake warship with a heavy catapult. Bombards shorelines and enemy ships.",
+  /* warden */ "Ironwood skirmisher (Archery Range). Fast, hardy and good against cavalry; shorter reach than an archer.",
+  /* catapult */ "Sunhold siege engine (Blacksmith). Hurls boulders at buildings and troops from afar; slow and helpless up close.",
 };
 static const char *BLD_NAME[10] = {
   /* towncenter */ "Town Center",
@@ -36,9 +40,9 @@ static const char *BLD_DESC[10] = {
   /* farm */ "Endless food for up to 3 builders. Build it close to a Town Center or Storehouse.",
   /* storehouse */ "Drop-off point for all resources. Build it next to forests, mines and farms.",
   /* barracks */ "Trains Swordsmen and Spearmen.",
-  /* archery */ "Trains Archers.",
+  /* archery */ "Trains Archers (and Ironwood Wardens).",
   /* stable */ "Trains Cavalry.",
-  /* blacksmith */ "Researches weapon and armor upgrades for all your soldiers.",
+  /* blacksmith */ "Researches weapon and armor upgrades for all your soldiers. Sunhold also builds Catapults here.",
   /* port */ "Must be built on the lake shore. Trains Warships.",
   /* tower */ "Defensive tower that shoots arrows at nearby enemies.",
 };
@@ -67,8 +71,8 @@ static const char *FAC_NAME[2] = {
   /* legion */ "Sunhold Legion",
 };
 static const char *FAC_DESC[2] = {
-  /* rangers */ "Archers and spearmen cost 15% less and archers hit 20% harder. Cavalry is frailer and pricier.",
-  /* legion */ "Swordsmen +15% health and +10% damage, cavalry +10% health and +8% speed. Archers a little frailer.",
+  /* rangers */ "Archers and spearmen cost 15% less, archers hit 20% harder. Unique: Warden skirmisher. Cavalry is frailer.",
+  /* legion */ "Swordsmen +15% health and +10% damage, cavalry +10% health and +8% speed. Unique: Catapult siege engine.",
 };
 #define FAC_COUNT 2
 static const char *MAP_DESC[5] = {

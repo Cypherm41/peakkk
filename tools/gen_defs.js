@@ -22,11 +22,11 @@ o += '\n';
 
 o += `typedef struct {
   double hp, speed, atk; int atkType; double range, cd; double bonus[NUM_CLS]; int armor[3];
-  int cost[4]; double time; int pop; double sight, carry; int water, soldier, cls, big;
+  int cost[4]; double time; int pop; double sight, carry; int water, soldier, cls, big, faction;
 } UnitDef;
 typedef struct {
   int w, h; double hp; int cost[4]; double time; int pop, drop, farm, shore;
-  double atk; int atkType; double range, cd; int trains[2]; int research[2];
+  double atk; int atkType; double range, cd; int trains[3]; int research[2];
 } BldDef;
 typedef struct { int res; double amt, rate; } NodeDef;
 typedef struct { int max; int base[2], step[2]; double tbase, tstep; } TechDef;  /* [food, gold] */
@@ -39,12 +39,12 @@ for (const k of D.UNIT_KEYS) {
   const u = D.UNIT_DEFS[k];
   const bonus = D.CLASSES.map((c) => f((u.bonus && u.bonus[c]) || 0)).join(',');
   o += `  /* ${k} */ { ${f(u.hp)}, ${f(u.speed)}, ${f(u.atk)}, ${D.ATK_TYPES.indexOf(u.atkType)}, ${f(u.range)}, ${f(u.cd)}, {${bonus}}, {${u.armor.melee},${u.armor.pierce},${u.armor.siege}}, ` +
-       `${cost4(u.cost)}, ${f(u.time)}, ${u.pop}, ${f(u.sight)}, ${f(u.carry || 0)}, ${u.domain === 'water' ? 1 : 0}, ${u.role === 'soldier' ? 1 : 0}, ${D.CLASSES.indexOf(u.cls)}, ${u.big ? 1 : 0} },\n`;
+       `${cost4(u.cost)}, ${f(u.time)}, ${u.pop}, ${f(u.sight)}, ${f(u.carry || 0)}, ${u.domain === 'water' ? 1 : 0}, ${u.role === 'soldier' ? 1 : 0}, ${D.CLASSES.indexOf(u.cls)}, ${u.big ? 1 : 0}, ${u.faction ? D.FACTION_KEYS.indexOf(u.faction) + 1 : 0} },\n`;
 }
 o += '};\n\nstatic const BldDef BDEF[NUM_BLD] = {\n';
 for (const k of D.BUILDING_KEYS) {
   const b = D.BUILDING_DEFS[k];
-  const tr = (b.trains || []).map((t) => D.UNIT_KEYS.indexOf(t)); while (tr.length < 2) tr.push(-1);
+  const tr = (b.trains || []).map((t) => D.UNIT_KEYS.indexOf(t)); while (tr.length < 3) tr.push(-1);
   const rs = (b.research || []).map((t) => D.TECH_KEYS.indexOf(t)); while (rs.length < 2) rs.push(-1);
   o += `  /* ${k} */ { ${b.w}, ${b.h}, ${f(b.hp)}, ${cost4(b.cost)}, ${f(b.time)}, ${b.pop || 0}, ${b.drop ? 1 : 0}, ${b.farm ? 1 : 0}, ${b.shore ? 1 : 0}, ` +
        `${f(b.atk || 0)}, ${b.atkType ? D.ATK_TYPES.indexOf(b.atkType) : 1}, ${f(b.range || 0)}, ${f(b.cd || 0)}, {${tr.join(',')}}, {${rs.join(',')}} },\n`;

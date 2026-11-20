@@ -22,7 +22,7 @@ const TEAMS = [
 const RES_ICON = { food: '🌾', wood: '🪵', gold: '🪙', stone: '🪨' };
 const RES_LIST = ['food', 'wood', 'gold', 'stone'];
 const ATK_TYPES = ['melee', 'pierce', 'siege'];
-const CLASSES = ['worker', 'infantry', 'spear', 'archer', 'cavalry', 'ship'];
+const CLASSES = ['worker', 'infantry', 'spear', 'archer', 'cavalry', 'ship', 'siege'];
 
 const NODE_DEFS = {
   tree:  { name: 'Tree',         res: 'wood',  amt: 100, rate: 1.0 },
@@ -67,6 +67,19 @@ const UNIT_DEFS = {
     armor: { melee: 3, pierce: 6, siege: 0 }, cost: { wood: 120, gold: 60 }, time: 30, pop: 3, sight: 8, big: true,
     desc: 'Lake warship with a heavy catapult. Bombards shorelines and enemy ships.',
   },
+  /* faction units (see FACTIONS): only the named faction can train them */
+  warden: {
+    name: 'Warden', icon: '🌿', cls: 'archer', role: 'soldier', domain: 'land', faction: 'rangers',
+    hp: 45, speed: 2.5, atk: 5, atkType: 'pierce', range: 4.5, cd: 1.2, bonus: { cavalry: 6 },
+    armor: { melee: 0, pierce: 2, siege: 0 }, cost: { food: 40, wood: 40, gold: 30 }, time: 16, pop: 1, sight: 7,
+    desc: 'Ironwood skirmisher (Archery Range). Fast, hardy and good against cavalry; shorter reach than an archer.',
+  },
+  catapult: {
+    name: 'Catapult', icon: '🪨', cls: 'siege', role: 'soldier', domain: 'land', faction: 'legion',
+    hp: 120, speed: 1.8, atk: 30, atkType: 'siege', range: 8, cd: 3.0,
+    armor: { melee: 1, pierce: 8, siege: 0 }, cost: { wood: 100, gold: 60 }, time: 28, pop: 2, sight: 7, big: true,
+    desc: 'Sunhold siege engine (Blacksmith). Hurls boulders at buildings and troops from afar; slow and helpless up close.',
+  },
 };
 
 const BUILDING_DEFS = {
@@ -94,8 +107,8 @@ const BUILDING_DEFS = {
   },
   archery: {
     name: 'Archery Range', icon: '🎯', w: 3, h: 3, hp: 800, cost: { wood: 175 }, time: 40,
-    trains: ['archer'], height: 26,
-    desc: 'Trains Archers.',
+    trains: ['archer', 'warden'], height: 26,
+    desc: 'Trains Archers (and Ironwood Wardens).',
   },
   stable: {
     name: 'Stable', icon: '🐴', w: 3, h: 3, hp: 900, cost: { wood: 175, stone: 50 }, time: 45,
@@ -104,8 +117,8 @@ const BUILDING_DEFS = {
   },
   blacksmith: {
     name: 'Blacksmith', icon: '🔨', w: 3, h: 3, hp: 800, cost: { wood: 150, gold: 50 }, time: 40,
-    research: ['weapons', 'armor'], height: 26,
-    desc: 'Researches weapon and armor upgrades for all your soldiers.',
+    trains: ['catapult'], research: ['weapons', 'armor'], height: 26,
+    desc: 'Researches weapon and armor upgrades for all your soldiers. Sunhold also builds Catapults here.',
   },
   port: {
     name: 'Port', icon: '⚓', w: 3, h: 3, hp: 1000, cost: { wood: 200, stone: 75 }, time: 50,
@@ -150,8 +163,8 @@ const DIFF_KEYS = Object.keys(DIFFS);
 /* Playable factions. Menu index i is core faction i + 1 (0 = classic, used by tests); the AI takes the other one.
    The multipliers live in c/game.c (FAC); keep the descriptions in step with them. */
 const FACTIONS = {
-  rangers: { name: 'Ironwood Rangers', desc: 'Archers and spearmen cost 15% less and archers hit 20% harder. Cavalry is frailer and pricier.' },
-  legion:  { name: 'Sunhold Legion',   desc: 'Swordsmen +15% health and +10% damage, cavalry +10% health and +8% speed. Archers a little frailer.' },
+  rangers: { name: 'Ironwood Rangers', desc: 'Archers and spearmen cost 15% less, archers hit 20% harder. Unique: Warden skirmisher. Cavalry is frailer.' },
+  legion:  { name: 'Sunhold Legion',   desc: 'Swordsmen +15% health and +10% damage, cavalry +10% health and +8% speed. Unique: Catapult siege engine.' },
 };
 const FACTION_KEYS = Object.keys(FACTIONS);
 /* Selectable maps. The order is the index passed to g_set_map in the C core. */

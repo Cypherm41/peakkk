@@ -69,7 +69,7 @@ static int overlay_open(void) { return screen == SCR_MENU || overlayPanel != PAN
 
 /* ------------------------------ names for the HUD ------------------------------ */
 
-static const char *UNIT_SHORT[NUM_UNIT] = { "Builder", "Sword", "Spear", "Archer", "Cavalry", "Ship" };
+static const char *UNIT_SHORT[NUM_UNIT] = { "Builder", "Sword", "Spear", "Archer", "Cavalry", "Ship", "Warden", "Catapult" };
 static const char *BLD_SHORT[NUM_BLD] = { "Town Ctr", "House", "Farm", "Storehs", "Barracks", "Archery", "Stable", "Smithy", "Port", "Tower" };
 static const char *TECH_SHORT[NUM_TECH] = { "Weapons", "Armor" };
 static const char *CLS_NAME[NUM_CLS] = { "worker", "infantry", "spear", "archer", "cavalry", "ship" };
@@ -327,9 +327,10 @@ static void get_commands(void) {
   if (b) {
     if (!b->done) return;
     int i = 0;
-    for (int k = 0; k < 2; k++) {
+    for (int k = 0; k < 3; k++) {
       int t = BDEF[b->type].trains[k];
       if (t < 0) continue;
+      if (UDEF[t].faction && UDEF[t].faction != g_get_faction(0)) continue;          /* faction-only units */
       const UnitDef *d = &UDEF[t];
       Cmd *c = &curCmds[i++];
       int popOk = mTeam[0].popUsed + d->pop <= mTeam[0].popCap;
