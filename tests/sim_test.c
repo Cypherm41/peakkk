@@ -237,18 +237,64 @@ static void run_ai_vs_ai(double minutes, uint32_t seed, int diff) {
   for (int t = 0; t < 2; t++) CHECK(teams[t].popUsed >= 0 && teams[t].popUsed <= MAX_POP + 5, "population in range");
 }
 
+/* place a building somewhere near the team's start (first free spot); returns its id, or a negative error */
+static int tryPlace(int team, int type) {
+  int r = -ERR_CANTBUILD;
+  for (int dy = -14; dy <= 14; dy += 3) for (int dx = -14; dx <= 14; dx += 3) {
+    r = placeBuilding(team, type, (int)base_x[team] + dx, (int)base_y[team] + dy, 0, 0);
+    if (r > 0 || (BDEF[type].faction && BDEF[type].faction != teams[team].fac)) return r;
+  }
+  return r;
+}
+
 /* faction units: gating by faction and the catapult's range */
 static void test_faction_units(void) {
   g_set_fog(0); g_set_ai_fair(-1);
   g_set_faction(0, 1); g_set_faction(1, 2); g_init(11, 1, 0);
   Bld fake; __builtin_memset(&fake, 0, sizeof fake); fake.id = 1; fake.done = 1;
   for (int t = 0; t < 2; t++) { teams[t].res[R_FOOD] = 2000; teams[t].res[R_WOOD] = 2000; teams[t].res[R_GOLD] = 2000; teams[t].popCap = 100; }
-  fake.team = 0; fake.type = B_ARCHERY; CHECK(queueUnit(&fake, U_WARDEN) == ERR_NONE, "Rangers train wardens");
+  fake.team = 0; fake.type = B_LODGE; CHECK(queueUnit(&fake, U_WARDEN) == ERR_NONE, "Rangers train wardens at the Hunters Lodge");
   fake.team = 1; fake.qlen = 0; CHECK(queueUnit(&fake, U_WARDEN) == ERR_CANTTRAIN, "Legion cannot train wardens");
-  fake.type = B_BLACKSMITH; fake.qlen = 0; CHECK(queueUnit(&fake, U_CATAPULT) == ERR_NONE, "Legion trains catapults at the blacksmith");
+  fake.type = B_SIEGECAMP; fake.qlen = 0; CHECK(queueUnit(&fake, U_CATAPULT) == ERR_NONE, "Legion trains catapults at the Siege Camp");
   fake.team = 0; fake.qlen = 0; CHECK(queueUnit(&fake, U_CATAPULT) == ERR_CANTTRAIN, "Rangers cannot train catapults");
   g_set_faction(0, 0); g_set_faction(1, 0); g_init(11, 1, 0); teams[0].res[R_WOOD] = 2000; teams[0].res[R_GOLD] = 2000; teams[0].popCap = 100;
-  fake.team = 0; fake.type = B_ARCHERY; fake.qlen = 0; CHECK(queueUnit(&fake, U_WARDEN) == ERR_CANTTRAIN, "classic mode has no faction units");
+  fake.team = 0; fake.type = B_LODGE; fake.qlen = 0; CHECK(queueUnit(&fake, U_WARDEN) == ERR_CANTTRAIN, "classic mode has no faction units");
+  /* who trains what */
+  g_set_faction(0, 0); g_set_faction(1, 0); g_init(11, 1, 0);
+  teams[0].res[R_FOOD] = 2000; teams[0].res[R_WOOD] = 2000; teams[0].res[R_GOLD] = 2000; teams[0].popCap = 100;
+  struct { int bld, unit, ok; const char *what; } rules[] = {
+    { B_BARRACKS, U_SWORDSMAN, 1, "Barracks train swordsmen" }, { B_BARRACKS, U_SPEARMAN, 0, "Barracks no longer train spearmen" },
+    { B_TOWNCENTER, U_BUILDER, 1, "Town Center trains builders" }, { B_TOWNCENTER, U_SPEARMAN, 1, "Town Center trains spearmen" },
+    { B_ARCHERY, U_ARCHER, 1, "Bowyer trains archers" }, { B_STABLE, U_CAVALRY, 1, "Stable trains cavalry" },
+    { B_PORT, U_WARSHIP, 1, "Port trains warships" }, { B_WIZARDTOWER, U_WIZARD, 1, "Wizard Tower trains wizards" },
+    { B_BLACKSMITH, U_CATAPULT, 0, "Blacksmith no longer trains catapults" }, { B_ARCHERY, U_WARDEN, 0, "Bowyer does not train wardens" },
+  };
+  for (unsigned i = 0; i < sizeof rules / sizeof *rules; i++) {
+    fake.team = 0; fake.type = rules[i].bld; fake.qlen = 0; fake.done = 1;
+    CHECK((queueUnit(&fake, rules[i].unit) == ERR_NONE) == rules[i].ok, rules[i].what);
+  }
+  /* faction buildings can only be placed by their faction */
+  g_set_faction(0, 1); g_set_faction(1, 2); g_init(11, 1, 0);
+  teams[0].res[R_WOOD] = teams[0].res[R_STONE] = teams[0].res[R_GOLD] = 5000; teams[1].res[R_WOOD] = teams[1].res[R_STONE] = teams[1].res[R_GOLD] = 5000;
+  CHECK(tryPlace(0, B_LODGE) > 0, "Rangers can build a Hunters Lodge");
+  CHECK(tryPlace(0, B_SIEGECAMP) < 0, "Rangers cannot build a Siege Camp");
+  CHECK(tryPlace(1, B_LODGE) < 0, "Legion cannot build a Hunters Lodge");
+  CHECK(tryPlace(1, B_SIEGECAMP) > 0, "Legion can build a Siege Camp");
+  CHECK(tryPlace(0, B_WIZARDTOWER) > 0 && tryPlace(1, B_WIZARDTOWER) > 0, "both factions can build a Wizard Tower");
+  /* fireball: area damage that ignores armor, then a cooldown */
+  g_set_faction(0, 0); g_set_faction(1, 0); g_init(12, 1, 0);
+  int wz = g_debug_spawn(0, U_WIZARD, 40.5, 40.5);
+  int e1 = g_debug_spawn(1, U_SWORDSMAN, 46.5, 40.5), e2 = g_debug_spawn(1, U_SWORDSMAN, 47.2, 41.0), e3 = g_debug_spawn(1, U_SWORDSMAN, 52.5, 40.5);
+  U(e1)->state = U(e2)->state = U(e3)->state = S_IDLE;
+  double hp1 = U(e1)->hp, hp3 = U(e3)->hp;
+  int wzs[1] = { wz }; orderCast(wzs, 1, 46.8, 40.7);
+  for (int i = 0; i < 10; i++) g_update(0.1);
+  CHECK(U(e1) && U(e1)->hp <= hp1 - 50 && U(e2) && U(e2)->hp < U(e2)->maxHp - 50, "fireball hurts everyone in the blast, through armor");
+  CHECK(U(e3) && U(e3)->hp >= hp3 - 12, "fireball spares units outside the blast");
+  CHECK(U(wz)->spellCd > 15, "fireball goes on cooldown");
+  int before = (int)U(wz)->spellCd; orderCast(wzs, 1, 46.8, 40.7); g_update(0.1);
+  CHECK(U(wz)->state != S_CAST && (int)U(wz)->spellCd <= before, "a wizard on cooldown cannot cast");
+  g_set_faction(0, 1); g_set_faction(1, 2); g_init(11, 1, 0);
   /* a catapult shells a house from range 7 without being touched */
   g_set_faction(0, 2); g_set_faction(1, 1); g_init(11, 1, 0);
   Bld *h = createBuilding(1, B_HOUSE, 36, 12, 1); CHECK(h != 0, "target house");

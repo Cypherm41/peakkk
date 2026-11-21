@@ -69,11 +69,12 @@ static int overlay_open(void) { return screen == SCR_MENU || overlayPanel != PAN
 
 /* ------------------------------ names for the HUD ------------------------------ */
 
-static const char *UNIT_SHORT[NUM_UNIT] = { "Builder", "Sword", "Spear", "Archer", "Cavalry", "Ship", "Warden", "Catapult" };
-static const char *BLD_SHORT[NUM_BLD] = { "Town Ctr", "House", "Farm", "Storehs", "Barracks", "Archery", "Stable", "Smithy", "Port", "Tower" };
+static const char *UNIT_SHORT[NUM_UNIT] = { "Builder", "Sword", "Spear", "Archer", "Cavalry", "Ship", "Warden", "Catapult", "Wizard" };
+static const char *BLD_SHORT[NUM_BLD] = { "Town Ctr", "House", "Farm", "Storehs", "Barracks", "Archery", "Stable", "Smithy", "Port", "Tower", "Lodge", "SiegeCmp", "WizTower" };
 static const char *TECH_SHORT[NUM_TECH] = { "Weapons", "Armor" };
-static const char *CLS_NAME[NUM_CLS] = { "worker", "infantry", "spear", "archer", "cavalry", "ship" };
+static const char *CLS_NAME[NUM_CLS] = { "worker", "infantry", "spear", "archer", "cavalry", "ship", "siege", "mage" };
 static const int BUILD_SLOTS[10] = { B_HOUSE, B_FARM, B_STOREHOUSE, B_BARRACKS, B_ARCHERY, B_STABLE, B_BLACKSMITH, B_PORT, B_TOWER, B_TOWNCENTER };
+static const int BUILD_SLOTS2[3] = { B_LODGE, B_SIEGECAMP, B_WIZARDTOWER };      /* second page of the builder card */
 static const char HK_CH[13] = "QWERASDFZXCV";
 static const SDL_Scancode HK_SC[12] = {
   SDL_SCANCODE_Q, SDL_SCANCODE_W, SDL_SCANCODE_E, SDL_SCANCODE_R, SDL_SCANCODE_A, SDL_SCANCODE_S,
@@ -90,14 +91,18 @@ static int team_of(int id) {
 static void set_sel(const int *ids, int n) {
   if (n > MAXSEL) n = MAXSEL;
   memmove(sel, ids, (size_t)n * sizeof(int));
-  nSel = n;
+  nSel = n; buildPage = 0;
 }
-static void sel_clear(void) { nSel = 0; }
+static void sel_clear(void) { nSel = 0; buildPage = 0; }
 static void sel_one(int id) { set_sel(&id, 1); }
 
 static void set_mode(int attackMove) {
-  cmdAttackMove = attackMove;
-  if (curCross && curArrow) SDL_SetCursor(attackMove || placingOn ? curCross : curArrow);
+  cmdAttackMove = attackMove; if (attackMove) cmdCast = 0;
+  if (curCross && curArrow) SDL_SetCursor(attackMove || cmdCast || placingOn ? curCross : curArrow);
+}
+static void set_cast(int on) {
+  cmdCast = on; if (on) { cmdAttackMove = 0; placingOn = 0; }
+  if (curCross && curArrow) SDL_SetCursor(on || placingOn ? curCross : curArrow);
 }
 
 /* ------------------------------ picking ------------------------------ */
@@ -166,7 +171,21 @@ static void split_workers(const int *ids, int n, int *wk, int *nw, int *ot, int 
   for (int i = 0; i < n; i++) { const FUnit *u = get_unit(ids[i]); if (u && is_worker_u(u)) wk[(*nw)++] = ids[i]; else ot[(*no)++] = ids[i]; }
 }
 
+static void do_cast(const int *ids, int n, float x, float y) {
+  if (n <= 0) return;
+  g_order_cast(push_ids(ids, n), x, y);
+}
+
 static void left_click(float sx, float sy, int shift) {
+  if (cmdCast) {
+    float wx, wy; s2w(sx, sy, &wx, &wy);
+    int us[MAXSEL], ws[MAXSEL], nws = 0, n = mine_ids(us);
+    for (int i = 0; i < n; i++) { const FUnit *w = get_unit(us[i]); if (w && UDEF[w->type].spell && w->spellCd <= 0.05f) ws[nws++] = us[i]; }
+    do_cast(ws, nws, wx, wy);
+    if (nws) { add_fx(wx, wy, 0xff9a3e); sfx(SFX_ORDER); }
+    set_cast(0); model_sync();
+    return;
+  }
   if (cmdAttackMove) {
     float wx, wy; s2w(sx, sy, &wx, &wy);
     int us[MAXSEL], wk[MAXSEL], ot[MAXSEL], nw, no, n = mine_ids(us);
@@ -225,6 +244,7 @@ static void select_box(float x0, float y0, float x1, float y1, int add) {
 }
 
 static void right_click(float sx, float sy) {
+  if (cmdCast) { set_cast(0); return; }
   if (cmdAttackMove) { set_mode(0); return; }
   if (placingOn) { placingOn = 0; set_mode(0); return; }
   float wx, wy; s2w(sx, sy, &wx, &wy);
@@ -293,7 +313,7 @@ static void stop_cmd(void) {
 
 /* ------------------------------ command card ------------------------------ */
 
-enum { CK_NONE = 0, CK_TRAIN, CK_TECH, CK_BUILD, CK_ATTACK, CK_STOP };
+enum { CK_NONE = 0, CK_TRAIN, CK_TECH, CK_BUILD, CK_ATTACK, CK_STOP, CK_PAGE, CK_CAST };
 typedef struct {
   int kind, arg, enabled, active, hasCost, cost[4];
   char label[20], title[48], stats[200], desc[200], warn[40], extra[24];
@@ -367,8 +387,11 @@ static void get_commands(void) {
   for (int i = 0; i < nm; i++) { const FUnit *u = get_unit(mineSel[i]); if (!u) continue; nu++; if (is_worker_u(u)) workers++; else soldiers++; }
   if (!nu) return;
   if (workers) {
-    for (int i = 0; i < 10; i++) {
-      int t = BUILD_SLOTS[i];
+    int slots[10], ns = 0;
+    if (buildPage == 1) { for (int k = 0; k < 3; k++) { int t = BUILD_SLOTS2[k]; if (!BDEF[t].faction || BDEF[t].faction == g_get_faction(0)) slots[ns++] = t; } }
+    else for (int k = 0; k < 10; k++) slots[ns++] = BUILD_SLOTS[k];
+    for (int i = 0; i < ns; i++) {
+      int t = slots[i];
       const BldDef *d = &BDEF[t];
       Cmd *c = &curCmds[i];
       c->kind = CK_BUILD; c->arg = t; c->hasCost = 1; memcpy(c->cost, d->cost, sizeof c->cost);
@@ -379,6 +402,21 @@ static void get_commands(void) {
       snprintf(c->stats, sizeof c->stats, "HP %g - Build time %gs%s", d->hp, d->time, pop);
       snprintf(c->desc, sizeof c->desc, "%s", BLD_DESC[t]);
     }
+  }
+  if (workers && !soldiers) {
+    Cmd *c = &curCmds[10];
+    c->kind = CK_PAGE; c->enabled = 1; c->glyph = buildPage ? '<' : '>'; snprintf(c->label, sizeof c->label, "%s", buildPage ? "Back" : "More");
+    snprintf(c->title, sizeof c->title, "%s", buildPage ? "Basic buildings" : "More buildings");
+    snprintf(c->desc, sizeof c->desc, "%s", buildPage ? "Back to houses, farms and the common military buildings." : "Faction buildings (Hunters Lodge or Siege Camp) and the Wizard Tower.");
+  }
+  int nwiz = 0, wready = 0; float wleft = 1e9f;
+  if (!workers) for (int i = 0; i < nm; i++) { const FUnit *u = get_unit(mineSel[i]); if (u && UDEF[u->type].spell) { nwiz++; if (u->spellCd <= 0.05f) wready++; if (u->spellCd < wleft) wleft = u->spellCd; } }
+  if (nwiz) {
+    Cmd *c = &curCmds[6];
+    c->kind = CK_CAST; c->enabled = wready > 0; c->active = cmdCast; c->glyph = 'F';
+    if (wready) snprintf(c->label, sizeof c->label, "Fireball"); else snprintf(c->label, sizeof c->label, "%ds", (int)ceilf(wleft));
+    snprintf(c->title, sizeof c->title, "Fireball");
+    snprintf(c->desc, sizeof c->desc, "Blast an area up to 9 tiles away: 55 damage to every enemy in it (ignores armor, 40%% to buildings). 22 s cooldown.");
   }
   if (soldiers) {
     Cmd *c = &curCmds[workers ? 10 : 4];
@@ -409,6 +447,8 @@ static void run_cmd(int i, int shift) {
     model_sync();
   } else if (c->kind == CK_BUILD) start_placing(c->arg);
   else if (c->kind == CK_ATTACK) set_mode(!cmdAttackMove);
+  else if (c->kind == CK_PAGE) { buildPage = !buildPage; sfx(SFX_SELECT); }
+  else if (c->kind == CK_CAST) set_cast(!cmdCast);
   else if (c->kind == CK_STOP) stop_cmd();
 }
 
@@ -549,7 +589,7 @@ static int ui_load_game(void) {
 static void ui_enter_game(const char *message) {
   sound_reset();
   model_bind_terrain();
-  nSel = 0; nEvQueue = 0; placingOn = 0; cmdAttackMove = 0; paused = 0; speedMul = 1; zoom = 1;
+  nSel = 0; nEvQueue = 0; placingOn = 0; cmdAttackMove = 0; cmdCast = 0; buildPage = 0; paused = 0; speedMul = 1; zoom = 1;
   nPings = 0; nClickFx = 0; nToasts = 0; idleIdx = 0; endShown = 0; hoverId = 0;
   memset(groupN, 0, sizeof groupN);
   mouse.down = mouse.mid = mouse.drag = mouse.onMini = 0;
@@ -787,6 +827,10 @@ static void draw_info(void) {
 
 static void draw_glyph(const Cmd *c, float cx, float cy, float a) {
   if (c->kind == CK_STOP) { fill_rect(cx - 8, cy - 8, 16, 16, 0xe86a5a, a); stroke_rect(cx - 8, cy - 8, 16, 16, 1.5f, 0x000000, a * 0.6f); return; }
+  if (c->kind == CK_CAST) {
+    fill_ellipse(cx, cy + 2, 9, 11, 0xff7a1e, a); fill_ellipse(cx, cy + 4, 5.5f, 7, 0xffd34a, a); fill_ellipse(cx, cy + 6, 2.6f, 3.5f, 0xfff1b0, a);
+    tri((V2){ cx - 6, cy - 2 }, (V2){ cx, cy - 13 }, (V2){ cx + 6, cy - 2 }, 0xff7a1e, a, 0, 0); return;
+  }
   if (c->kind == CK_ATTACK) {
     line(cx - 10, cy + 9, cx + 10, cy - 9, 3, 0xe8ecf4, a); line(cx - 10, cy - 9, cx + 10, cy + 9, 3, 0xe8ecf4, a);
     line(cx - 12, cy + 11, cx - 6, cy + 5, 3, 0xb07a3e, a); line(cx - 12, cy - 11, cx - 6, cy - 5, 3, 0xb07a3e, a); return;
@@ -881,7 +925,8 @@ static void draw_toasts(void) {
 }
 
 static void draw_mode_hint(void) {
-  const char *s = cmdAttackMove ? "Attack-move: click a destination (right-click or Esc to cancel)"
+  const char *s = cmdCast ? "Fireball: click a target point (right-click or Esc to cancel)"
+                : cmdAttackMove ? "Attack-move: click a destination (right-click or Esc to cancel)"
                 : placingOn ? "Click to build (Shift = keep building, right-click / Esc = cancel)" : NULL;
   if (!s) return;
   float w = text_width(s, 1) * 2 + 28;
@@ -1010,7 +1055,7 @@ static void draw_menu(void) {
   static const char *tips[4] = {
     "Train builders at the Town Center and put them to work: chop trees, build farms, mine gold and stone.",
     "Build houses before you hit the population cap, and storehouses next to forests and mines.",
-    "Raise an army from the Barracks, Archery Range and Stable. Swordsmen beat spearmen, spearmen beat cavalry, cavalry beat archers, archers beat swordsmen.",
+    "Raise an army: Barracks (swordsmen), Town Center (spearmen), Bowyer (archers), Stable (cavalry), Port (warships), plus Hunters Lodge, Siege Camp and Wizard Tower (builder card, More). Swordsmen beat spearmen, spearmen beat cavalry, cavalry beat archers, archers beat swordsmen.",
     "Destroy every Yellow building to win. Press F1 in game for all controls.",
   };
   float y = p.y + 560;
@@ -1187,7 +1232,7 @@ static void on_key(SDL_Scancode sc, int mod) {
   if (!inGame || overlay_open()) { if (sc == SDL_SCANCODE_ESCAPE && overlayPanel == PANEL_HELP) overlayPanel = PANEL_NONE; return; }
   if (sc >= SDL_SCANCODE_1 && sc <= SDL_SCANCODE_9) { group_key(sc - SDL_SCANCODE_1 + 1, ctrl || shift); return; }
   switch (sc) {
-    case SDL_SCANCODE_ESCAPE: if (placingOn) { placingOn = 0; set_mode(0); } else if (cmdAttackMove) set_mode(0); else sel_clear(); return;
+    case SDL_SCANCODE_ESCAPE: if (placingOn) { placingOn = 0; set_mode(0); } else if (cmdCast) set_cast(0); else if (cmdAttackMove) set_mode(0); else sel_clear(); return;
     case SDL_SCANCODE_P: toggle_pause(); return;
     case SDL_SCANCODE_SPACE: center_selection(); return;
     case SDL_SCANCODE_PERIOD: cycle_idle(); return;

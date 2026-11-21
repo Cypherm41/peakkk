@@ -167,6 +167,9 @@ static void economy_and_buildings(const FBld *tc) {
   if (B >= 14 && cnt_blds(0, B_BARRACKS, 0) < S->barracks && try_build(B_BARRACKS, cx, cy, 6, 14, 1)) return;
   if (S->smith && B >= 16 && cnt_blds(0, B_BLACKSMITH, 0) < 1 && try_build(B_BLACKSMITH, cx, cy, 6, 14, 1)) return;
   if (S->stable && B >= 18 && cnt_blds(0, B_STABLE, 0) < S->stable && try_build(B_STABLE, cx, cy, 6, 14, 1)) return;
+  if (botFac == 1 && B >= 16 && cnt_blds(0, B_LODGE, 0) < 1 && try_build(B_LODGE, cx, cy, 6, 14, 1)) return;
+  if (botFac == 2 && B >= 16 && cnt_blds(0, B_SIEGECAMP, 0) < 1 && try_build(B_SIEGECAMP, cx, cy, 6, 14, 1)) return;
+  if (B >= 20 && cnt_blds(0, B_WIZARDTOWER, 0) < 1 && try_build(B_WIZARDTOWER, cx, cy, 6, 14, 1)) return;
 }
 
 static void production(const FBld *tc) {
@@ -175,13 +178,16 @@ static void production(const FBld *tc) {
   if (B < S->builders && !behind) train(tc, U_BUILDER, 2);
   else if (B < 12) train(tc, U_BUILDER, 2);
   int sw = cnt_units(0, U_SWORDSMAN), sp = cnt_units(0, U_SPEARMAN), en_cav = cnt_units(1, U_CAVALRY), en_arch = cnt_units(1, U_ARCHER);
+  if (B >= 10 && (en_cav * 2 > sw + sp || sp < sw)) train(tc, U_SPEARMAN, 2);          /* spearmen come from the Town Center */
   for (int i = 0; i < nBlds; i++) {
     const FBld *b = &mBlds[i];
     if (b->team != 0 || !b->done) continue;
-    if (b->type == B_BARRACKS) train(b, (en_cav * 2 > sw + sp || sp < sw) ? U_SPEARMAN : U_SWORDSMAN, 2), (void)en_arch;
-    else if (b->type == B_ARCHERY) train(b, botFac == 1 && cnt_units(0, U_WARDEN) * 4 < cnt_units(0, U_ARCHER) ? U_WARDEN : U_ARCHER, 2);
+    if (b->type == B_BARRACKS) train(b, U_SWORDSMAN, 2), (void)en_arch;
+    else if (b->type == B_ARCHERY) train(b, U_ARCHER, 2);
+    else if (b->type == B_LODGE) train(b, U_WARDEN, 1);
+    else if (b->type == B_SIEGECAMP && cnt_soldiers(0) >= 10 && cnt_units(0, U_CATAPULT) < 4) train(b, U_CATAPULT, 1);
+    else if (b->type == B_WIZARDTOWER && cnt_units(0, U_WIZARD) < 3) train(b, U_WIZARD, 1);
     else if (b->type == B_STABLE) train(b, U_CAVALRY, 1);
-    else if (b->type == B_BLACKSMITH && b->qlen == 0 && botFac == 2 && cnt_soldiers(0) >= 10 && cnt_units(0, U_CATAPULT) < 4) train(b, U_CATAPULT, 1);
     else if (b->type == B_BLACKSMITH && b->qlen == 0 && B >= 14) {
       int w = mTeam[0].upWeapons + g_tech_pending(0, TECH_WEAPONS), a = mTeam[0].upArmor + g_tech_pending(0, TECH_ARMOR);
       int t = w <= a ? TECH_WEAPONS : TECH_ARMOR, lvl = t == TECH_WEAPONS ? w : a;

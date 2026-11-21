@@ -16,7 +16,7 @@ typedef struct {
   int moving, working;
   float carry;
   int carryType, gatherKind, sub;
-  float atkAnim, cd;
+  float atkAnim, cd, spellCd;
   int targetDone, targetId;
 } FUnit;
 
@@ -98,7 +98,7 @@ static void model_sync(void) {
     u->x = o[3]; u->y = o[4]; u->hp = o[5]; u->maxHp = o[6];
     u->state = (int)o[7]; u->face = o[8] < 0 ? -1 : 1; u->anim = o[9]; u->moving = o[10] != 0; u->working = o[11] != 0;
     u->carry = o[12]; u->carryType = (int)o[13]; u->gatherKind = (int)o[14]; u->sub = (int)o[15];
-    u->atkAnim = o[16]; u->cd = o[17]; u->targetDone = o[18] != 0; u->targetId = (int)o[19];
+    u->atkAnim = o[16]; u->cd = o[17]; u->targetDone = o[18] != 0; u->targetId = (int)o[19]; u->spellCd = o[20];
     if (u->id > 0 && u->id < SIM_MAXID) { idKind[u->id] = K_UNIT; idIdx[u->id] = (unsigned short)i; }
   }
 
@@ -142,7 +142,7 @@ static void model_sync(void) {
   for (int i = 0; i < np; i++) {
     const float *o = P + i * P_STRIDE;
     mProjs[i].sx = o[0]; mProjs[i].sy = o[1]; mProjs[i].t = o[2]; mProjs[i].dur = o[3] > 0.001f ? o[3] : 0.001f;
-    mProjs[i].stone = o[4] != 0; mProjs[i].tx = o[5]; mProjs[i].ty = o[6];
+    mProjs[i].stone = (int)o[4]; mProjs[i].tx = o[5]; mProjs[i].ty = o[6];
   }
   nEffs = ne;
   for (int i = 0; i < ne; i++) {

@@ -22,7 +22,7 @@ const TEAMS = [
 const RES_ICON = { food: '🌾', wood: '🪵', gold: '🪙', stone: '🪨' };
 const RES_LIST = ['food', 'wood', 'gold', 'stone'];
 const ATK_TYPES = ['melee', 'pierce', 'siege'];
-const CLASSES = ['worker', 'infantry', 'spear', 'archer', 'cavalry', 'ship', 'siege'];
+const CLASSES = ['worker', 'infantry', 'spear', 'archer', 'cavalry', 'ship', 'siege', 'mage'];
 
 const NODE_DEFS = {
   tree:  { name: 'Tree',         res: 'wood',  amt: 100, rate: 1.0 },
@@ -72,21 +72,27 @@ const UNIT_DEFS = {
     name: 'Warden', icon: '🌿', cls: 'archer', role: 'soldier', domain: 'land', faction: 'rangers',
     hp: 45, speed: 2.5, atk: 5, atkType: 'pierce', range: 4.5, cd: 1.2, bonus: { cavalry: 6 },
     armor: { melee: 0, pierce: 2, siege: 0 }, cost: { food: 40, wood: 40, gold: 30 }, time: 16, pop: 1, sight: 7,
-    desc: 'Ironwood skirmisher (Archery Range). Fast, hardy and good against cavalry; shorter reach than an archer.',
+    desc: 'Ironwood skirmisher (Hunters Lodge). Fast, hardy and good against cavalry; shorter reach than an archer.',
   },
   catapult: {
     name: 'Catapult', icon: '🪨', cls: 'siege', role: 'soldier', domain: 'land', faction: 'legion',
     hp: 120, speed: 1.8, atk: 30, atkType: 'siege', range: 8, cd: 3.0,
     armor: { melee: 1, pierce: 8, siege: 0 }, cost: { wood: 100, gold: 60 }, time: 28, pop: 2, sight: 7, big: true,
-    desc: 'Sunhold siege engine (Blacksmith). Hurls boulders at buildings and troops from afar; slow and helpless up close.',
+    desc: 'Sunhold siege engine (Siege Camp). Hurls boulders at buildings and troops from afar; slow and helpless up close.',
+  },
+  wizard: {
+    name: 'Wizard', icon: '🧙', cls: 'mage', role: 'soldier', domain: 'land',
+    hp: 40, speed: 1.9, atk: 8, atkType: 'pierce', range: 6, cd: 1.6, spell: 'fireball',
+    armor: { melee: 0, pierce: 1, siege: 0 }, cost: { food: 50, gold: 110 }, time: 24, pop: 2, sight: 8,
+    desc: 'Frail spellcaster (Wizard Tower). Hurls magic bolts and can cast Fireball, an area blast, from far away.',
   },
 };
 
 const BUILDING_DEFS = {
   towncenter: {
     name: 'Town Center', icon: '🏰', w: 3, h: 3, hp: 1600, cost: { wood: 300, stone: 200 }, time: 90, pop: 10,
-    drop: true, trains: ['builder'], atk: 8, atkType: 'pierce', range: 6.5, cd: 1.5, height: 44,
-    desc: 'Heart of your realm. Trains builders, stores resources, +10 population, shoots arrows.',
+    drop: true, trains: ['builder', 'spearman'], atk: 8, atkType: 'pierce', range: 6.5, cd: 1.5, height: 44,
+    desc: 'Heart of your realm. Trains builders and spearmen, stores resources, +10 population, shoots arrows.',
   },
   house: {
     name: 'House', icon: '🏠', w: 2, h: 2, hp: 350, cost: { wood: 40 }, time: 20, pop: 5, height: 20,
@@ -102,13 +108,13 @@ const BUILDING_DEFS = {
   },
   barracks: {
     name: 'Barracks', icon: '⚔️', w: 3, h: 3, hp: 900, cost: { wood: 150, stone: 50 }, time: 40,
-    trains: ['swordsman', 'spearman'], height: 28,
-    desc: 'Trains Swordsmen and Spearmen.',
+    trains: ['swordsman'], height: 28,
+    desc: 'Trains Swordsmen.',
   },
   archery: {
-    name: 'Archery Range', icon: '🎯', w: 3, h: 3, hp: 800, cost: { wood: 175 }, time: 40,
-    trains: ['archer', 'warden'], height: 26,
-    desc: 'Trains Archers (and Ironwood Wardens).',
+    name: 'Bowyer', icon: '🎯', w: 3, h: 3, hp: 800, cost: { wood: 175 }, time: 40,
+    trains: ['archer'], height: 26,
+    desc: 'Trains Archers.',
   },
   stable: {
     name: 'Stable', icon: '🐴', w: 3, h: 3, hp: 900, cost: { wood: 175, stone: 50 }, time: 45,
@@ -117,8 +123,8 @@ const BUILDING_DEFS = {
   },
   blacksmith: {
     name: 'Blacksmith', icon: '🔨', w: 3, h: 3, hp: 800, cost: { wood: 150, gold: 50 }, time: 40,
-    trains: ['catapult'], research: ['weapons', 'armor'], height: 26,
-    desc: 'Researches weapon and armor upgrades for all your soldiers. Sunhold also builds Catapults here.',
+    research: ['weapons', 'armor'], height: 26,
+    desc: 'Researches weapon and armor upgrades for all your soldiers.',
   },
   port: {
     name: 'Port', icon: '⚓', w: 3, h: 3, hp: 1000, cost: { wood: 200, stone: 75 }, time: 50,
@@ -129,6 +135,21 @@ const BUILDING_DEFS = {
     name: 'Watch Tower', icon: '🗼', w: 2, h: 2, hp: 700, cost: { wood: 80, stone: 120 }, time: 40,
     atk: 11, atkType: 'pierce', range: 7.5, cd: 1.6, height: 54,
     desc: 'Defensive tower that shoots arrows at nearby enemies.',
+  },
+  lodge: {
+    name: 'Hunters Lodge', icon: '🌿', w: 3, h: 3, hp: 800, cost: { wood: 200, stone: 30 }, time: 40, faction: 'rangers',
+    trains: ['warden'], height: 26,
+    desc: 'Ironwood only. Trains Wardens.',
+  },
+  siegecamp: {
+    name: 'Siege Camp', icon: '🪨', w: 3, h: 3, hp: 1000, cost: { wood: 200, stone: 100 }, time: 50, faction: 'legion',
+    trains: ['catapult'], height: 24,
+    desc: 'Sunhold only. Builds Catapults.',
+  },
+  wizardtower: {
+    name: 'Wizard Tower', icon: '🔮', w: 3, h: 3, hp: 700, cost: { wood: 150, stone: 100, gold: 150 }, time: 60,
+    trains: ['wizard'], height: 52,
+    desc: 'Trains Wizards, who hurl fireballs from afar.',
   },
 };
 for (const k in BUILDING_DEFS) BUILDING_DEFS[k].armor = { melee: 4, pierce: 12, siege: 0 };

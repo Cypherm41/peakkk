@@ -18,6 +18,7 @@ int *g_idbuf(void);
 int g_idbuf_len(void);
 void g_order_move(int n, double x, double y, int attackMove);
 void g_order_stop(int n);
+void g_order_cast(int n, double x, double y);   /* wizards: Fireball at a point */
 void g_order_attack(int n, int target);
 void g_order_build(int n, int bid);
 void g_order_gather(int n, int target);
@@ -58,7 +59,7 @@ uint8_t *g_shade(void);
 int g_layout(int which);
 
 /* snapshot layout; checked against g_layout() at start-up */
-#define U_STRIDE 20
+#define U_STRIDE 21
 #define B_STRIDE 34
 #define N_STRIDE 6
 #define P_STRIDE 8
@@ -75,7 +76,10 @@ int g_layout(int which);
 #define SIM_MAXEV 96
 #define SIM_MAXID 65536
 
-enum { ST_IDLE = 0, ST_MOVE, ST_ATTACKMOVE, ST_ATTACK, ST_GATHER, ST_BUILD };
+enum { ST_IDLE = 0, ST_MOVE, ST_ATTACKMOVE, ST_ATTACK, ST_GATHER, ST_BUILD, ST_CAST };
+#define FIREBALL_RANGE 9.0f          /* keep in step with c/game.c */
+#define FIREBALL_RADIUS 2.6f
+#define FIREBALL_CD 22.0f
 enum { SUBST_NONE = 0, SUBST_TORES, SUBST_WORK, SUBST_TODROP };
 enum { TILE_GRASS = 0, TILE_WATER = 1, TILE_SAND = 2 };
 enum { RES_FOOD = 0, RES_WOOD, RES_GOLD, RES_STONE };

@@ -13,6 +13,8 @@ const MM_W = 260, MM_H = 130;
 const MM_K = MM_W / ((MAP_W + MAP_H) * 32);
 const HOTKEYS = 'QWERASDFZXCV';
 const BUILD_SLOTS = ['house', 'farm', 'storehouse', 'barracks', 'archery', 'stable', 'blacksmith', 'port', 'tower', 'towncenter'];
+const BUILD_SLOTS2 = ['lodge', 'siegecamp', 'wizardtower'];      // second page of the builder's card: faction and magic buildings
+let buildPage = 0;
 
 let game = null;
 let W = 0, H = 0, DPR = 1, VX = 0, VY = 0;
@@ -20,7 +22,7 @@ const cam = { x: 0, y: 0 };
 let zoom = 1;
 let sel = [];
 let placing = null;       // { type, x, y, valid }
-let cmdMode = null;       // 'attackmove'
+let cmdMode = null;       // 'attackmove' | 'cast' (wizard Fireball)
 let paused = false, speed = 1, lastT = 0, hudTimer = 0, idleIdx = 0;
 let diffChoice = 'normal';
 try { const v = JSON.parse(localStorage.getItem('peakkk.menu') || '{}'); if (DIFFS[v.d]) diffChoice = v.d; if (MAPS[v.m]) var savedMap = v.m; if (v.f === false) var savedFog = false; if (FACTIONS[v.fa]) var savedFac = v.fa; } catch (e) {}
@@ -343,14 +345,21 @@ function drawBuilding(b, ghostAlpha) {
       ctx.fillStyle = T.color; ctx.fillRect(p[0] - 1.5, p[1] - 9, 3, 2);
       break;
     }
-    case 'barracks': case 'archery': case 'stable': case 'blacksmith': {
-      const wallCol = { barracks: '#9b7650', archery: '#a98557', stable: '#8c6a45', blacksmith: '#85807a' }[b.type];
+    case 'barracks': case 'archery': case 'stable': case 'blacksmith': case 'lodge': case 'siegecamp': case 'wizardtower': {
+      const wallCol = { barracks: '#9b7650', archery: '#a98557', stable: '#8c6a45', blacksmith: '#85807a', lodge: '#6b7f4a', siegecamp: '#7a746c', wizardtower: '#7f7a99' }[b.type];
       box(x, y, w, h, 0, Hh, wallCol);
       door(x, y, w, h, Hh * 0.62);
-      if (roofOn) {
+      if (roofOn && b.type === 'wizardtower') {
+        pyramid(x + 0.1, y + 0.1, w - 0.2, h - 0.2, Hh, 46, '#5a3d9a');
+        const o = P(x + w / 2, y + h / 2, Hh + 49), pulse = 0.6 + 0.4 * Math.sin(performance.now() / 300);
+        ctx.fillStyle = 'rgba(140,190,255,' + (0.25 * pulse) + ')'; ctx.beginPath(); ctx.arc(o[0], o[1], 9, 0, 6.3); ctx.fill();
+        ctx.fillStyle = '#bfe0ff'; ctx.beginPath(); ctx.arc(o[0], o[1], 3.4, 0, 6.3); ctx.fill();
+        flag(x + 0.5, y + 0.5, Hh + 6, T, 12);
+      } else if (roofOn) {
         pyramid(x - 0.2, y - 0.2, w + 0.4, h + 0.4, Hh, 15, T.color);
         flag(x + w * 0.5, y + h * 0.5, Hh + 15, T, 14);
       }
+      if (b.type === 'siegecamp') for (const [bx, by] of [[x + w + 0.35, y + 0.5], [x + w + 0.55, y + 0.85], [x + w + 0.3, y + 0.95]]) { const q = P(bx, by, 0); ctx.fillStyle = '#6d6d75'; ctx.beginPath(); ctx.arc(q[0], q[1] - 3, 3.2, 0, 6.3); ctx.fill(); }
       // emblem on the left face
       const ex = x + w * 0.72, ez = Hh * 0.55, p = P(ex, y + h, ez);
       ctx.save(); ctx.translate(p[0], p[1]); ctx.lineWidth = 2;
@@ -359,6 +368,14 @@ function drawBuilding(b, ghostAlpha) {
         ctx.strokeStyle = '#b08a3a'; ctx.beginPath(); ctx.moveTo(-3, 3); ctx.lineTo(3, 3); ctx.stroke();
       } else if (b.type === 'archery') {
         for (const [r, c] of [[7, '#f2f2f2'], [5, '#c93a2a'], [3, '#f2f2f2'], [1.4, '#c93a2a']]) { ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.8, 0, 0, 6.3); ctx.fill(); }
+      } else if (b.type === 'lodge') {
+        ctx.fillStyle = '#7fd04a'; ctx.beginPath(); ctx.moveTo(-6, 4); ctx.quadraticCurveTo(-4, -7, 6, -6); ctx.quadraticCurveTo(5, 4, -6, 4); ctx.fill();
+        ctx.strokeStyle = '#2f5a1c'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(-6, 4); ctx.lineTo(4, -4); ctx.stroke();
+      } else if (b.type === 'siegecamp') {
+        ctx.fillStyle = '#4b4b52'; ctx.beginPath(); ctx.arc(0, 1, 5.5, 0, 6.3); ctx.fill();
+        ctx.strokeStyle = '#c9b27a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-7, 6); ctx.lineTo(6, -7); ctx.stroke();
+      } else if (b.type === 'wizardtower') {
+        ctx.fillStyle = '#ffe27a'; ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(2, -2); ctx.lineTo(7, 0); ctx.lineTo(2, 2); ctx.lineTo(0, 7); ctx.lineTo(-2, 2); ctx.lineTo(-7, 0); ctx.lineTo(-2, -2); ctx.closePath(); ctx.fill();
       } else if (b.type === 'stable') {
         ctx.strokeStyle = '#d9d9d9'; ctx.lineWidth = 2.4; ctx.beginPath(); ctx.arc(0, 0, 5, 0.2, Math.PI - 0.2, true); ctx.stroke();
       } else {
@@ -507,6 +524,20 @@ function drawUnit(u, selected) {
       if (u.cd > 0.8 || sw > 0) line(5 - pull, -11 - bob, 13, -11 - bob, '#cbb27a', 1.2);
       break;
     }
+    case 'wizard': {
+      legs(t, mv, '#3a2f5a');
+      ctx.fillStyle = T.color; ctx.beginPath(); ctx.moveTo(-5, -4 - bob); ctx.lineTo(-3.4, -17 - bob); ctx.lineTo(3.4, -17 - bob); ctx.lineTo(5, -4 - bob); ctx.closePath(); ctx.fill();   // robe
+      ctx.fillStyle = T.dark; ctx.fillRect(-3.4, -11 - bob, 6.8, 1.6);
+      head(-19.5 - bob, false);
+      ctx.fillStyle = '#4b3a8a'; ctx.beginPath(); ctx.moveTo(-6, -21 - bob); ctx.lineTo(0, -34 - bob); ctx.lineTo(6, -21 - bob); ctx.closePath(); ctx.fill();   // hat
+      ctx.fillRect(-7.4, -22 - bob, 14.8, 1.8);
+      const lift = sw * 7, sx = 8, top = -24 - lift;
+      line(sx, -2, sx, top, '#7a5a30', 1.8);
+      const pulse = 0.6 + 0.4 * Math.sin(t * 6);
+      ctx.fillStyle = 'rgba(140,190,255,' + (0.3 * pulse + sw * 0.5) + ')'; ctx.beginPath(); ctx.arc(sx, top - 2, 5 + sw * 6, 0, 6.3); ctx.fill();
+      ctx.fillStyle = '#d6e8ff'; ctx.beginPath(); ctx.arc(sx, top - 2, 2.6, 0, 6.3); ctx.fill();
+      break;
+    }
     case 'warden': {
       legs(t, mv, '#2f3a22');
       ctx.fillStyle = T.color; ctx.fillRect(-4.2, -15 - bob, 8.4, 10);
@@ -593,7 +624,10 @@ function drawProjectile(p) {
     return [isoX(x, y), isoY(x, y) - z];
   };
   const a = at(t), b = at(Math.max(0, t - 0.07));
-  if (p.kind === 'stone') {
+  if (p.kind === 'magic') {
+    ctx.fillStyle = 'rgba(111,168,255,.3)'; ctx.beginPath(); ctx.arc(a[0], a[1], 5.5, 0, 6.3); ctx.fill();
+    ctx.fillStyle = '#d6e8ff'; ctx.beginPath(); ctx.arc(a[0], a[1], 2.6, 0, 6.3); ctx.fill();
+  } else if (p.kind === 'stone') {
     ctx.fillStyle = '#2b2b2b'; ctx.beginPath(); ctx.arc(a[0], a[1], 3.6, 0, 6.3); ctx.fill();
     ctx.fillStyle = 'rgba(255,255,255,.25)'; ctx.beginPath(); ctx.arc(a[0] - 1, a[1] - 1, 1.2, 0, 6.3); ctx.fill();
   } else {
@@ -680,7 +714,15 @@ function render() {
   for (const p of game.projectiles) drawProjectile(p);
   for (const e of game.effects) {
     const x = isoX(e.x, e.y), y = isoY(e.x, e.y) - e.z, a = clamp(e.life / e.max, 0, 1);
-    if (e.type === 'dust') { ctx.globalAlpha = a * 0.8; ctx.fillStyle = e.color; ctx.beginPath(); ctx.arc(x, y, 2 + (1 - a) * 3, 0, 6.3); ctx.fill(); ctx.globalAlpha = 1; }
+    if (e.type === 'fireball') {
+      const R = 2.6 * (0.35 + 0.65 * (1 - a)), cx = isoX(e.x, e.y), cy = isoY(e.x, e.y);
+      ctx.globalAlpha = a * 0.45; ctx.fillStyle = '#ff7a1e'; ctx.beginPath();
+      ctx.moveTo(isoX(e.x - R, e.y), isoY(e.x - R, e.y)); ctx.lineTo(isoX(e.x, e.y - R), isoY(e.x, e.y - R));
+      ctx.lineTo(isoX(e.x + R, e.y), isoY(e.x + R, e.y)); ctx.lineTo(isoX(e.x, e.y + R), isoY(e.x, e.y + R)); ctx.closePath(); ctx.fill();
+      const g = 0.5 + 0.5 * (1 - a);
+      ctx.globalAlpha = a * 0.8; ctx.fillStyle = '#ffd34a'; ctx.beginPath(); ctx.ellipse(cx, cy - 6 * (1 - a), 16 * g, 12 * g, 0, 0, 6.3); ctx.fill();
+      ctx.globalAlpha = a; ctx.fillStyle = '#fff1b0'; ctx.beginPath(); ctx.arc(cx, cy - 10 * (1 - a), 7, 0, 6.3); ctx.fill(); ctx.globalAlpha = 1;
+    } else if (e.type === 'dust') { ctx.globalAlpha = a * 0.8; ctx.fillStyle = e.color; ctx.beginPath(); ctx.arc(x, y, 2 + (1 - a) * 3, 0, 6.3); ctx.fill(); ctx.globalAlpha = 1; }
     else { ctx.globalAlpha = Math.min(1, a * 2); ctx.font = 'bold 13px Georgia'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.strokeText(e.text, x, y); ctx.fillStyle = e.color; ctx.fillText(e.text, x, y); ctx.globalAlpha = 1; }
   }
 
@@ -703,6 +745,11 @@ function render() {
     }
   }
 
+  if (cmdMode === 'cast') {                       // Fireball target: blast radius around the cursor
+    const w = s2w(mouse.x, mouse.y), R = 2.6;
+    ctx.save(); ctx.strokeStyle = 'rgba(255,150,60,.9)'; ctx.fillStyle = 'rgba(255,120,30,.18)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(isoX(w.x - R, w.y), isoY(w.x - R, w.y)); ctx.lineTo(isoX(w.x, w.y - R), isoY(w.x, w.y - R)); ctx.lineTo(isoX(w.x + R, w.y), isoY(w.x + R, w.y)); ctx.lineTo(isoX(w.x, w.y + R), isoY(w.x, w.y + R)); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+  }
   // building ghost
   if (placing) {
     const d = BUILDING_DEFS[placing.type];
@@ -837,7 +884,7 @@ function pickAt(sx, sy) {
 }
 
 function setSel(list) {
-  sel = list; cmdSig = '';
+  sel = list; cmdSig = ''; buildPage = 0;
   if (game) { renderInfo(); renderCmds(); }   // refresh now, so hotkeys right after a selection act on the new command card
 }
 function selectUnitsInBox(x0, y0, x1, y1, add) {
@@ -852,6 +899,12 @@ function selectUnitsInBox(x0, y0, x1, y1, add) {
   sfx('select');
 }
 function leftClick(sx, sy, shift) {
+  if (cmdMode === 'cast') {
+    const w = s2w(sx, sy), ws = mine().filter((u) => u.def.spell && u.spellCd <= 0.05);
+    if (ws.length) { game.orderCast(ws, w.x, w.y); sfx('order'); addFx(w.x, w.y, '#ff9a3e'); }
+    setMode(null);
+    return;
+  }
   if (cmdMode === 'attackmove') {
     const w = s2w(sx, sy), us = mine();
     const soldiers = us.filter((u) => !isWorker(u)), others = us.filter(isWorker);
@@ -903,7 +956,8 @@ function rightClick(sx, sy) {
 function setMode(m) {
   cmdMode = m;
   const hint = $('modeHint');
-  if (m === 'attackmove') { hint.style.display = 'block'; hint.textContent = 'Attack-move: click a destination (right-click or Esc to cancel)'; canvas.style.cursor = 'crosshair'; }
+  if (m === 'cast') { hint.style.display = 'block'; hint.textContent = 'Fireball: click a target point (right-click or Esc to cancel)'; canvas.style.cursor = 'crosshair'; }
+  else if (m === 'attackmove') { hint.style.display = 'block'; hint.textContent = 'Attack-move: click a destination (right-click or Esc to cancel)'; canvas.style.cursor = 'crosshair'; }
   else if (placing) { hint.style.display = 'block'; hint.textContent = 'Click to build (Shift = keep building, right-click / Esc = cancel)'; canvas.style.cursor = 'crosshair'; }
   else { hint.style.display = 'none'; canvas.style.cursor = 'default'; }
   cmdSig = '';
@@ -973,7 +1027,8 @@ function getCommands() {
   if (!us.length) return cmds;
   const workers = us.filter(isWorker), soldiers = us.filter((u) => !isWorker(u));
   if (workers.length) {
-    BUILD_SLOTS.forEach((type, i) => {
+    const page = buildPage === 1 ? BUILD_SLOTS2.filter((t) => !BUILDING_DEFS[t].faction || FACTION_KEYS.indexOf(BUILDING_DEFS[t].faction) + 1 === game.faction[0]) : BUILD_SLOTS;
+    page.forEach((type, i) => {
       const d = BUILDING_DEFS[type];
       cmds[i] = {
         icon: d.icon, label: d.name, cost: d.cost, enabled: !missingRes(res, d.cost), active: placing && placing.type === type,
@@ -981,6 +1036,16 @@ function getCommands() {
         run: () => startPlacing(type),
       };
     });
+  }
+  if (workers.length && !soldiers.length) {
+    cmds[10] = buildPage ? { icon: '◀', label: 'Back', cost: {}, enabled: true, tip: { title: 'Basic buildings', desc: 'Back to houses, farms and the common military buildings.' }, run: () => { buildPage = 0; cmdSig = ''; renderCmds(); } }
+                         : { icon: '▶', label: 'More', cost: {}, enabled: true, tip: { title: 'More buildings', desc: 'Faction buildings (Hunters Lodge or Siege Camp) and the Wizard Tower.' }, run: () => { buildPage = 1; cmdSig = ''; renderCmds(); } };
+  }
+  const wizards = soldiers.filter((u) => u.def.spell);
+  if (wizards.length && !workers.length) {
+    const ready = wizards.filter((u) => u.spellCd <= 0.05).length, left = Math.min(...wizards.map((u) => u.spellCd));
+    cmds[6] = { icon: '🔥', label: ready ? 'Fireball' : Math.ceil(left) + 's', cost: {}, enabled: ready > 0, active: cmdMode === 'cast',
+      tip: { title: 'Fireball', desc: 'Blast an area up to 9 tiles away: 55 damage to every enemy in it (ignores armor, 40% to buildings). 22 s cooldown.' }, run: () => setMode(cmdMode === 'cast' ? null : 'cast') };
   }
   if (soldiers.length) {
     cmds[workers.length ? 10 : 4] = { icon: '⚔️', label: 'Attack', cost: {}, enabled: true, active: cmdMode === 'attackmove', tip: { title: 'Attack-move', desc: 'Move to a point, attacking any enemy met on the way.' }, run: () => setMode(cmdMode ? null : 'attackmove') };

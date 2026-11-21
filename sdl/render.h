@@ -173,11 +173,18 @@ static void draw_building(const FBld *b, float ghostAlpha) {
       fill_rect(p.x - 1.5f, p.y - 9, 3, 2, TEAM_COLOR[team], 1);
       break;
     }
-    case B_BARRACKS: case B_ARCHERY: case B_STABLE: case B_BLACKSMITH: {
-      unsigned wallCol = b->type == B_BARRACKS ? 0x9b7650 : b->type == B_ARCHERY ? 0xa98557 : b->type == B_STABLE ? 0x8c6a45 : 0x85807a;
+    case B_BARRACKS: case B_ARCHERY: case B_STABLE: case B_BLACKSMITH: case B_LODGE: case B_SIEGECAMP: case B_WIZARDTOWER: {
+      unsigned wallCol = b->type == B_BARRACKS ? 0x9b7650 : b->type == B_ARCHERY ? 0xa98557 : b->type == B_STABLE ? 0x8c6a45 : b->type == B_LODGE ? 0x6b7f4a : b->type == B_SIEGECAMP ? 0x7a746c : b->type == B_WIZARDTOWER ? 0x7f7a99 : 0x85807a;
       box(x, y, w, h, 0, Hh, wallCol, 0);
       door(x, y, w, h, Hh * 0.62f);
-      if (roofOn) { pyramid(x - 0.2f, y - 0.2f, w + 0.4f, h + 0.4f, Hh, 15, TEAM_COLOR[team]); flag(x + w * 0.5f, y + h * 0.5f, Hh + 15, team, 14); }
+      if (roofOn && b->type == B_WIZARDTOWER) {
+        pyramid(x + 0.1f, y + 0.1f, w - 0.2f, h - 0.2f, Hh, 46, 0x5a3d9a);
+        V2 o = P(x + w / 2, y + h / 2, Hh + 49); float pulse = 0.6f + 0.4f * sinf(gNow / 0.3f);
+        fill_ellipse(o.x, o.y, 9, 9, 0x8cbeff, 0.25f * pulse); fill_ellipse(o.x, o.y, 3.4f, 3.4f, 0xbfe0ff, 1);
+        flag(x + 0.5f, y + 0.5f, Hh + 6, team, 12);
+      } else if (roofOn) { pyramid(x - 0.2f, y - 0.2f, w + 0.4f, h + 0.4f, Hh, 15, TEAM_COLOR[team]); flag(x + w * 0.5f, y + h * 0.5f, Hh + 15, team, 14); }
+      if (b->type == B_SIEGECAMP) { float bp[3][2] = { { x + w + 0.35f, y + 0.5f }, { x + w + 0.55f, y + 0.85f }, { x + w + 0.3f, y + 0.95f } };
+        for (int i = 0; i < 3; i++) { V2 q = P(bp[i][0], bp[i][1], 0); fill_ellipse(q.x, q.y - 3, 3.2f, 3.2f, 0x6d6d75, 1); } }
       V2 e = P(x + w * 0.72f, y + h, Hh * 0.55f);
       if (b->type == B_BARRACKS) {
         line(e.x - 6, e.y - 6, e.x + 6, e.y + 6, 2, 0xe6edf2, 1); line(e.x + 6, e.y - 6, e.x - 6, e.y + 6, 2, 0xe6edf2, 1);
@@ -185,6 +192,16 @@ static void draw_building(const FBld *b, float ghostAlpha) {
       } else if (b->type == B_ARCHERY) {
         fill_ellipse(e.x, e.y, 7, 5.6f, 0xf2f2f2, 1); fill_ellipse(e.x, e.y, 5, 4, 0xc93a2a, 1);
         fill_ellipse(e.x, e.y, 3, 2.4f, 0xf2f2f2, 1); fill_ellipse(e.x, e.y, 1.4f, 1.1f, 0xc93a2a, 1);
+      } else if (b->type == B_LODGE) {
+        tri((V2){ e.x - 6, e.y + 4 }, (V2){ e.x - 2, e.y - 7 }, (V2){ e.x + 6, e.y - 5 }, 0x7fd04a, 1, 0x2f5a1c, 1);
+        tri((V2){ e.x - 6, e.y + 4 }, (V2){ e.x + 6, e.y - 5 }, (V2){ e.x + 4, e.y + 3 }, 0x7fd04a, 1, 0x2f5a1c, 1);
+        line(e.x - 6, e.y + 4, e.x + 4, e.y - 4, 1.2f, 0x2f5a1c, 1);
+      } else if (b->type == B_SIEGECAMP) {
+        fill_ellipse(e.x, e.y + 1, 5.5f, 5.5f, 0x4b4b52, 1); line(e.x - 7, e.y + 6, e.x + 6, e.y - 7, 2, 0xc9b27a, 1);
+      } else if (b->type == B_WIZARDTOWER) {
+        float st[8][2] = { { 0, -7 }, { 2, -2 }, { 7, 0 }, { 2, 2 }, { 0, 7 }, { -2, 2 }, { -7, 0 }, { -2, -2 } };
+        float pts[8][2]; for (int i = 0; i < 8; i++) { pts[i][0] = e.x + st[i][0]; pts[i][1] = e.y + st[i][1]; }
+        fill_poly(pts, 8, 0xffe27a, 1);
       } else if (b->type == B_STABLE) {
         stroke_arc(e.x, e.y, 5, 5, PI_F - 0.2f, 0.2f, 2.4f, 0xd9d9d9, 1);   /* horseshoe: opening faces down */
         stroke_arc(e.x, e.y, 5, 5, 0.2f, PI_F - 0.2f, 2.4f, 0xd9d9d9, 0);
@@ -393,6 +410,20 @@ static void draw_unit(const FUnit *u, int selected) {
       if (u->cd > 0.8f || sw > 0) l_line(5 - pull, -11 - bob, 13, -11 - bob, 1.2f, 0xcbb27a, 1);
       break;
     }
+    case U_WIZARD: {
+      u_legs(t, mv, 0x3a2f5a);
+      tri((V2){ -5, -4 - bob }, (V2){ -3.4f, -17 - bob }, (V2){ 5, -4 - bob }, TC, 1, 0, 0);
+      tri((V2){ -3.4f, -17 - bob }, (V2){ 3.4f, -17 - bob }, (V2){ 5, -4 - bob }, TC, 1, 0, 0);
+      l_rect(-3.4f, -11 - bob, 6.8f, 1.6f, TD, 1);
+      u_head(-19.5f - bob, 0);
+      l_tri(-6, -21 - bob, 0, -34 - bob, 6, -21 - bob, 0x4b3a8a, 1);
+      l_rect(-7.4f, -22 - bob, 14.8f, 1.8f, 0x4b3a8a, 1);
+      float lift = sw * 7, sx = 8, top = -24 - lift, pulse = 0.6f + 0.4f * sinf(t * 6);
+      l_line(sx, -2, sx, top, 1.8f, 0x7a5a30, 1);
+      l_ellipse(sx, top - 2, 5 + sw * 6, 5 + sw * 6, 0x8cbeff, 0.3f * pulse + sw * 0.5f);
+      l_ellipse(sx, top - 2, 2.6f, 2.6f, 0xd6e8ff, 1);
+      break;
+    }
     case U_WARDEN: {
       u_legs(t, mv, 0x2f3a22);
       l_rect(-4.2f, -15 - bob, 8.4f, 10, TC, 1);
@@ -481,7 +512,10 @@ static void draw_projectile(const FProj *p) {
     float z = 10 + sinf(tt * PI_F) * dd * (p->stone ? 7.0f : 3.5f);
     pts[k][0] = isoX(x, y); pts[k][1] = isoY(x, y) - z;
   }
-  if (p->stone) {
+  if (p->stone == 2) {                                   /* wizard bolt */
+    fill_ellipse(pts[0][0], pts[0][1], 5.5f, 5.5f, 0x6fa8ff, 0.3f);
+    fill_ellipse(pts[0][0], pts[0][1], 2.6f, 2.6f, 0xd6e8ff, 1);
+  } else if (p->stone) {
     fill_ellipse(pts[0][0], pts[0][1], 3.6f, 3.6f, 0x2b2b2b, 1);
     fill_ellipse(pts[0][0] - 1, pts[0][1] - 1, 1.2f, 1.2f, 0xffffff, 0.25f);
   } else {
@@ -492,7 +526,15 @@ static void draw_projectile(const FProj *p) {
 
 static void draw_effect(const FEff *e) {
   float x = isoX(e->x, e->y), y = isoY(e->x, e->y) - e->z, a = clampf(e->life / e->max, 0, 1);
-  if (e->type == 0) {
+  if (e->type == 2) {                                    /* Fireball blast: a growing, fading ring of fire */
+    float R = FIREBALL_RADIUS * (0.35f + 0.65f * (1 - a));
+    float d[4][2] = { { isoX(e->x - R, e->y), isoY(e->x - R, e->y) }, { isoX(e->x, e->y - R), isoY(e->x, e->y - R) },
+                      { isoX(e->x + R, e->y), isoY(e->x + R, e->y) }, { isoX(e->x, e->y + R), isoY(e->x, e->y + R) } };
+    fill_poly(d, 4, 0xff7a1e, a * 0.45f);
+    float cx = isoX(e->x, e->y), cy = isoY(e->x, e->y);
+    fill_ellipse(cx, cy - 6 * (1 - a), 16 * (0.5f + 0.5f * (1 - a)), 12 * (0.5f + 0.5f * (1 - a)), 0xffd34a, a * 0.8f);
+    fill_ellipse(cx, cy - 10 * (1 - a), 7, 7, 0xfff1b0, a);
+  } else if (e->type == 0) {
     static const unsigned dust[3] = { 0x6b4a2b, 0x8a7a5a, 0x7a6a52 };
     float r = 2 + (1 - a) * 3;
     fill_ellipse(x, y, r, r, dust[(e->color >= 0 && e->color < 3) ? e->color : 1], a * 0.8f);
@@ -667,6 +709,12 @@ static void render_world(int mouseX, int mouseY, int dragging, float dragX, floa
     }
   }
 
+  if (cmdCast) {                                       /* Fireball target: blast radius around the cursor */
+    float wx, wy; s2w(mouseX, mouseY, &wx, &wy); float R = FIREBALL_RADIUS;
+    float d[4][2] = { { isoX(wx - R, wy), isoY(wx - R, wy) }, { isoX(wx, wy - R), isoY(wx, wy - R) }, { isoX(wx + R, wy), isoY(wx + R, wy) }, { isoX(wx, wy + R), isoY(wx, wy + R) } };
+    fill_poly(d, 4, 0xff7814, 0.18f);
+    for (int i = 0; i < 4; i++) line(d[i][0], d[i][1], d[(i + 1) % 4][0], d[(i + 1) % 4][1], 2, 0xff963c, 0.9f);
+  }
   /* building ghost */
   if (placingOn) {
     FBld g; memset(&g, 0, sizeof g);

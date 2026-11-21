@@ -23,12 +23,12 @@ const gameReady = (async () => {
   const { instance } = await WebAssembly.instantiate(bytes, {});
   _X = instance.exports; _mem = _X.memory;
   // Make sure JS and C agree on the snapshot layout.
-  const expect = [20, 34, 6, 8, 9, 6, 8];
+  const expect = [21, 34, 6, 8, 9, 6, 8];
   expect.forEach((v, i) => { if (_X.g_layout(i) !== v) throw new Error('wasm snapshot layout mismatch at ' + i); });
 })();
 
-const U_STRIDE = 20, B_STRIDE = 34, N_STRIDE = 6, P_STRIDE = 8, E_STRIDE = 9, EV_STRIDE = 6, T_STRIDE = 8;
-const STATE_NAMES = ['idle', 'move', 'attackmove', 'attack', 'gather', 'build'];
+const U_STRIDE = 21, B_STRIDE = 34, N_STRIDE = 6, P_STRIDE = 8, E_STRIDE = 9, EV_STRIDE = 6, T_STRIDE = 8;
+const STATE_NAMES = ['idle', 'move', 'attackmove', 'attack', 'gather', 'build', 'cast'];
 const SUB_NAMES = [null, 'toRes', 'work', 'toDrop'];
 const DUST_COLORS = ['#6b4a2b', '#8a7a5a', '#7a6a52'];
 const ERROR_TEXT = {
@@ -121,7 +121,7 @@ class Game {
       e.x = U[o + 3]; e.y = U[o + 4]; e.hp = U[o + 5]; e.maxHp = U[o + 6];
       e.state = STATE_NAMES[U[o + 7]]; e.face = U[o + 8]; e.anim = U[o + 9]; e.moving = !!U[o + 10]; e.working = !!U[o + 11];
       e.carry = U[o + 12]; e.carryType = U[o + 13] >= 0 ? RES_LIST[U[o + 13]] : null; e.gatherKind = U[o + 14] >= 0 ? RES_LIST[U[o + 14]] : null;
-      e.sub = SUB_NAMES[U[o + 15]]; e.atkAnim = U[o + 16]; e.cd = U[o + 17]; e.targetDone = !!U[o + 18]; e.targetId = U[o + 19];
+      e.sub = SUB_NAMES[U[o + 15]]; e.atkAnim = U[o + 16]; e.cd = U[o + 17]; e.targetDone = !!U[o + 18]; e.targetId = U[o + 19]; e.spellCd = U[o + 20];
       seenU.add(id); units.push(e);
     }
     for (const [id, e] of this._u) if (!seenU.has(id)) { e.dead = true; this._u.delete(id); }
@@ -172,13 +172,14 @@ class Game {
     const proj = [];
     for (let i = 0; i < np; i++) {
       const o = i * P_STRIDE;
-      proj.push({ sx: P[o], sy: P[o + 1], t: P[o + 2], dur: P[o + 3], kind: P[o + 4] ? 'stone' : 'arrow', target: { kind: 'unit', x: P[o + 5], y: P[o + 6] } });
+      proj.push({ sx: P[o], sy: P[o + 1], t: P[o + 2], dur: P[o + 3], kind: P[o + 4] === 2 ? 'magic' : P[o + 4] ? 'stone' : 'arrow', target: { kind: 'unit', x: P[o + 5], y: P[o + 6] } });
     }
     this.projectiles = proj;
     const eff = [];
     for (let i = 0; i < ne; i++) {
       const o = i * E_STRIDE;
-      if (E[o] === 0) eff.push({ type: 'dust', x: E[o + 1], y: E[o + 2], z: E[o + 3], life: E[o + 4], max: E[o + 5], color: DUST_COLORS[E[o + 6]] || '#8a7a5a' });
+      if (E[o] === 2) eff.push({ type: 'fireball', x: E[o + 1], y: E[o + 2], z: 0, life: E[o + 4], max: E[o + 5] });
+      else if (E[o] === 0) eff.push({ type: 'dust', x: E[o + 1], y: E[o + 2], z: E[o + 3], life: E[o + 4], max: E[o + 5], color: DUST_COLORS[E[o + 6]] || '#8a7a5a' });
       else eff.push({ type: 'text', x: E[o + 1], y: E[o + 2], z: E[o + 3], life: E[o + 4], max: E[o + 5], text: '+' + E[o + 7] + ' ' + RES_ICON[RES_LIST[E[o + 8]]], color: '#fff' });
     }
     this.effects = eff;
@@ -189,6 +190,7 @@ class Game {
       else if (type === 3) this.events.push({ type: 'destroyed', team, name: BUILDING_DEFS[BUILDING_KEYS[a]].name, x: EV[o + 2], y: EV[o + 3] });
       else if (type === 4) this.events.push({ type: 'msg', team, text: TECHS[TECH_KEYS[a]].name + ' researched' });
       else if (type === 5) this.events.push({ type: 'msg', team: 0, text: 'The Yellow army is on the march!', alertEnemy: true });
+      else if (type === 6) this.events.push({ type: 'spell', team, x: EV[o + 2], y: EV[o + 3] });
     }
   }
 
@@ -202,6 +204,7 @@ class Game {
   }
   orderMove(units, x, y) { _X.g_order_move(this._ids(units), x, y, 0); this.sync(); }
   orderAttackMove(units, x, y) { _X.g_order_move(this._ids(units), x, y, 1); this.sync(); }
+  orderCast(units, x, y) { _X.g_order_cast(this._ids(units), x, y); this.sync(); }   // wizards: Fireball
   orderStop(units) { _X.g_order_stop(this._ids(units)); this.sync(); }
   orderAttack(units, target) { _X.g_order_attack(this._ids(units), target.id); this.sync(); }
   orderBuild(units, building) { _X.g_order_build(this._ids(units), building.id); this.sync(); }

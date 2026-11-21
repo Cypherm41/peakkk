@@ -2,7 +2,7 @@
 #ifndef GAMEDATA_H
 #define GAMEDATA_H
 
-static const char *UNIT_NAME[8] = {
+static const char *UNIT_NAME[9] = {
   /* builder */ "Builder",
   /* swordsman */ "Swordsman",
   /* spearman */ "Spearman",
@@ -11,40 +11,48 @@ static const char *UNIT_NAME[8] = {
   /* warship */ "Warship",
   /* warden */ "Warden",
   /* catapult */ "Catapult",
+  /* wizard */ "Wizard",
 };
-static const char *UNIT_DESC[8] = {
+static const char *UNIT_DESC[9] = {
   /* builder */ "Gathers wood, food, gold and stone, builds and repairs. Weak in a fight.",
   /* swordsman */ "Sturdy melee infantry. Strong against spearmen and buildings, weak to archers.",
   /* spearman */ "Cheap infantry with a long reach. Devastating against cavalry; loses to swordsmen.",
   /* archer */ "Ranged attacker that shreds infantry from a distance. Fragile and weak to cavalry.",
   /* cavalry */ "Fast mounted knight. Runs down archers and builders; spearmen are its nightmare.",
   /* warship */ "Lake warship with a heavy catapult. Bombards shorelines and enemy ships.",
-  /* warden */ "Ironwood skirmisher (Archery Range). Fast, hardy and good against cavalry; shorter reach than an archer.",
-  /* catapult */ "Sunhold siege engine (Blacksmith). Hurls boulders at buildings and troops from afar; slow and helpless up close.",
+  /* warden */ "Ironwood skirmisher (Hunters Lodge). Fast, hardy and good against cavalry; shorter reach than an archer.",
+  /* catapult */ "Sunhold siege engine (Siege Camp). Hurls boulders at buildings and troops from afar; slow and helpless up close.",
+  /* wizard */ "Frail spellcaster (Wizard Tower). Hurls magic bolts and can cast Fireball, an area blast, from far away.",
 };
-static const char *BLD_NAME[10] = {
+static const char *BLD_NAME[13] = {
   /* towncenter */ "Town Center",
   /* house */ "House",
   /* farm */ "Farm",
   /* storehouse */ "Storehouse",
   /* barracks */ "Barracks",
-  /* archery */ "Archery Range",
+  /* archery */ "Bowyer",
   /* stable */ "Stable",
   /* blacksmith */ "Blacksmith",
   /* port */ "Port",
   /* tower */ "Watch Tower",
+  /* lodge */ "Hunters Lodge",
+  /* siegecamp */ "Siege Camp",
+  /* wizardtower */ "Wizard Tower",
 };
-static const char *BLD_DESC[10] = {
-  /* towncenter */ "Heart of your realm. Trains builders, stores resources, +10 population, shoots arrows.",
+static const char *BLD_DESC[13] = {
+  /* towncenter */ "Heart of your realm. Trains builders and spearmen, stores resources, +10 population, shoots arrows.",
   /* house */ "Adds +5 population capacity.",
   /* farm */ "Endless food for up to 3 builders. Build it close to a Town Center or Storehouse.",
   /* storehouse */ "Drop-off point for all resources. Build it next to forests, mines and farms.",
-  /* barracks */ "Trains Swordsmen and Spearmen.",
-  /* archery */ "Trains Archers (and Ironwood Wardens).",
+  /* barracks */ "Trains Swordsmen.",
+  /* archery */ "Trains Archers.",
   /* stable */ "Trains Cavalry.",
-  /* blacksmith */ "Researches weapon and armor upgrades for all your soldiers. Sunhold also builds Catapults here.",
+  /* blacksmith */ "Researches weapon and armor upgrades for all your soldiers.",
   /* port */ "Must be built on the lake shore. Trains Warships.",
   /* tower */ "Defensive tower that shoots arrows at nearby enemies.",
+  /* lodge */ "Ironwood only. Trains Wardens.",
+  /* siegecamp */ "Sunhold only. Builds Catapults.",
+  /* wizardtower */ "Trains Wizards, who hurl fireballs from afar.",
 };
 static const char *TECH_NAME[2] = {
   /* weapons */ "Forged Weapons",
@@ -94,7 +102,7 @@ static const char MUSIC_FORM[] = "AABA";
 static const int MUSIC_DRONE[2] = { 38, 45 };
 #define MAP_COUNT 5
 
-static const float BLD_HEIGHT[10] = { 44.0f, 20.0f, 2.0f, 18.0f, 28.0f, 26.0f, 26.0f, 26.0f, 24.0f, 54.0f };
+static const float BLD_HEIGHT[13] = { 44.0f, 20.0f, 2.0f, 18.0f, 28.0f, 26.0f, 26.0f, 26.0f, 24.0f, 54.0f, 26.0f, 24.0f, 52.0f };
 
 static const char *TEAM_NAME[2] = { "Green", "Yellow" };
 static const unsigned TEAM_COLOR[2] = { 0x3fae49, 0xebc83c };

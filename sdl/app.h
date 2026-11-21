@@ -48,7 +48,7 @@ static const char *DIFF_NAME[3] = { "Easy", "Normal", "Hard" };
 static int sel[MAXSEL], nSel;
 static int hoverId;                      /* entity under the mouse (0 = none), set by ui_update, drawn by render_world */
 static int placingOn, placeType, placeX, placeY, placeValid;
-static int cmdAttackMove;
+static int cmdAttackMove, cmdCast, buildPage;     /* cmdCast: picking a Fireball target; buildPage: builder card page */
 static int paused, speedMul = 1;
 static int idleIdx;
 static int groups[10][MAXSEL / 4], groupN[10];

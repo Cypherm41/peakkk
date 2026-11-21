@@ -36,11 +36,16 @@
 #define MAXEV 96
 
 enum { T_GRASS = 0, T_WATER = 1, T_SAND = 2 };
-enum { S_IDLE = 0, S_MOVE, S_ATTACKMOVE, S_ATTACK, S_GATHER, S_BUILD };
+enum { S_IDLE = 0, S_MOVE, S_ATTACKMOVE, S_ATTACK, S_GATHER, S_BUILD, S_CAST };
+/* wizard Fireball: area blast, ignores armor (buildings take 40%) */
+#define FIREBALL_RANGE 9.0
+#define FIREBALL_RADIUS 2.6
+#define FIREBALL_DMG 55.0
+#define FIREBALL_CD 22.0
 enum { SUB_NONE = 0, SUB_TORES, SUB_WORK, SUB_TODROP };
 enum { K_UNIT = 1, K_BLD = 2, K_NODE = 3 };
 enum { R_FOOD = 0, R_WOOD, R_GOLD, R_STONE };
-enum { EV_ALERT = 1, EV_BUILT, EV_DESTROYED, EV_TECH, EV_MARCH };
+enum { EV_ALERT = 1, EV_BUILT, EV_DESTROYED, EV_TECH, EV_MARCH, EV_SPELL };
 enum { ERR_NONE = 0, ERR_NOTREADY, ERR_CANTTRAIN, ERR_QFULL, ERR_HOUSES, ERR_POPLIMIT, ERR_RES0 /* +res idx */ = 6, ERR_MAXED = 10, ERR_CANTBUILD = 11, ERR_SHORE = 12 };
 
 /* ------------------------------- Helpers --------------------------------- */
@@ -82,7 +87,7 @@ static double rnd(void) {                       /* mulberry32 -> [0,1) */
 typedef struct {
   int id, type, team, dead, state, sub;
   int target;                       /* entity id (unit / building / node), 0 = none */
-  double x, y, hp, maxHp, tx, ty, cd, atkAnim, anim, scan, repath, carry;
+  double x, y, hp, maxHp, tx, ty, cd, atkAnim, anim, scan, repath, carry, spellCd;
   int face, moving, working, carryType, gatherKind, lastKind, farm, drop, autoAtk, partial, ptx, pty, wave, raid;
   double homeX, homeY; int hasHome;
   int haspath, pi, plen; float px[MAXPATH], py[MAXPATH];
@@ -134,10 +139,10 @@ static Team teams[2];
 /* factions: 0 = classic (neutral), 1 = Ironwood Rangers, 2 = Sunhold Legion. Per-unit multipliers. */
 typedef struct { double hp, atk, spd, cost; } FacMod;
 static const FacMod FAC[3][NUM_UNIT] = {
-  /* builder, swordsman, spearman, archer, cavalry, warship, warden, catapult */
-  { {1,1,1,1},{1,1,1,1},{1,1,1,1},{1,1,1,1},{1,1,1,1},{1,1,1,1},{1,1,1,1},{1,1,1,1} },
-  { {1,1,1,1},{1,0.95,1,1},{1.1,1,1,0.85},{1,1.2,1,0.85},{0.9,1,1,1.1},{1,1,1,1},{1,1,1,1},{1,1,1,1} },
-  { {1,1,1.1,1},{1.15,1.1,1,1.0},{1,1,1,1},{0.95,1,1,1},{1.1,1,1.08,1},{1.1,1,1,1},{1,1,1,1},{1,1,1,1} },
+  /* builder, swordsman, spearman, archer, cavalry, warship, warden, catapult, wizard */
+  { {1,1,1,1},{1,1,1,1},{1,1,1,1},{1,1,1,1},{1,1,1,1},{1,1,1,1},{1,1,1,1},{1,1,1,1},{1,1,1,1} },
+  { {1,1,1,1},{1,0.95,1,1},{1.1,1,1,0.85},{1,1.2,1,0.85},{0.9,1,1,1.1},{1,1,1,1},{1,1,1,1},{1,1,1,1},{1,1,1,1} },
+  { {1,1,1.1,1},{1.15,1.1,1,1.0},{1,1,1,1},{0.95,1,1,1},{1.1,1,1.08,1},{1.1,1,1,1},{1,1,1,1},{1,1,1,1},{1,1,1,1} },
 };
 static int facSet[2];
 static const FacMod *facMod(int team, int type) { return &FAC[teams[team].fac][type]; }
@@ -926,6 +931,7 @@ static void cancelQueue(Bld *b, int i) {
 
 static int placeBuilding(int team, int type, int x, int y, const int *builders, int nb) {
   const BldDef *d = &BDEF[type]; Team *t = &teams[team];
+  if (d->faction && d->faction != t->fac) return -ERR_CANTBUILD;          /* faction buildings */
   if (!canPlace(type, x, y, 0)) return d->shore ? -ERR_SHORE : -ERR_CANTBUILD;
   int miss = missingRes(t->res, d->cost);
   if (miss >= 0) return -(ERR_RES0 + miss);
@@ -963,6 +969,7 @@ static void pushEvent(int type, int team, double x, double y, int a, int b) {
 
 static void kill(const TV *t);
 
+static double spellDmg = 0;                        /* >0: fixed damage that ignores armor (Fireball) */
 static void damage(int akind, int atype, int aid, int ateam, const TV *t) {
   double atk; int atkType; const double *bonus = 0; int isSoldierUnit = 0;
   if (akind == K_UNIT) { const UnitDef *ad = &UDEF[atype]; atk = ad->atk * facMod(ateam, atype)->atk; atkType = ad->atkType; bonus = ad->bonus; isSoldierUnit = ad->soldier && atkType != 2; }
@@ -980,7 +987,7 @@ static void damage(int akind, int atype, int aid, int ateam, const TV *t) {
     static const int BUILDING_ARMOR[3] = { 4, 12, 0 };      /* melee / pierce / siege; matches js/defs.js */
     armor = BUILDING_ARMOR[atkType];
   }
-  dmg = d_max(1, dmg - armor);
+  dmg = spellDmg > 0 ? spellDmg : d_max(1, dmg - armor);
   Unit *tu = t->kind == K_UNIT ? U(t->id) : 0; Bld *tb = t->kind == K_BLD ? B(t->id) : 0;
   if (!tu && !tb) return;
   double *hp = tu ? &tu->hp : &tb->hp;
@@ -1041,7 +1048,7 @@ static void fireAt(int akind, int atype, int aid, int ateam, int tid, double fx,
 static void doAttack(Unit *u, const TV *t) {
   const UnitDef *d = &UDEF[u->type];
   u->cd = d->cd; u->atkAnim = 0.28;
-  if (d->range > 2) fireAt(K_UNIT, u->type, u->id, u->team, t->id, u->x, u->y, d->atkType == 2);
+  if (d->range > 2) fireAt(K_UNIT, u->type, u->id, u->team, t->id, u->x, u->y, d->spell ? 2 : d->atkType == 2);
   else damage(K_UNIT, u->type, u->id, u->team, t);
 }
 
@@ -1246,9 +1253,52 @@ static void updateBuild(Unit *u, double dt) {
   }
 }
 
+/* ---- wizard spell ---- */
+static void fireball(Unit *u, double x, double y) {
+  spellDmg = FIREBALL_DMG;
+  for (int i = 0; i < MAXU; i++) {
+    Unit *t = &units[i];
+    if (!t->id || t->dead || t->team == u->team || t->hp <= 0) continue;
+    if (d_hypot(t->x - x, t->y - y) > FIREBALL_RADIUS) continue;
+    TV tv; tv_unit(t, &tv); damage(K_UNIT, u->type, u->id, u->team, &tv);
+  }
+  spellDmg = FIREBALL_DMG * 0.4;
+  for (int i = 0; i < MAXB; i++) {
+    Bld *b = &blds[i];
+    if (!b->id || b->dead || b->team == u->team) continue;
+    double cx = b->x + b->w / 2.0, cy = b->y + b->h / 2.0;
+    if (d_hypot(cx - x, cy - y) > FIREBALL_RADIUS + (b->w + b->h) / 4.0) continue;
+    TV tv; tv_bld(b, &tv); damage(K_UNIT, u->type, u->id, u->team, &tv);
+  }
+  spellDmg = 0;
+  Eff e; __builtin_memset(&e, 0, sizeof e); e.type = 2; e.x = x; e.y = y; e.life = 0.8; e.max = 0.8; addEffect(&e);
+  burst(x, y, 18, 1, 5.0);
+  pushEvent(EV_SPELL, u->team, x, y, 0, 0);
+}
+static void updateCast(Unit *u, double dt) {
+  if (!UDEF[u->type].spell || u->spellCd > 0) { setOrder(u, S_IDLE, 0, 0, 0, 0); return; }
+  double d = d_hypot(u->tx - u->x, u->ty - u->y);
+  if (d <= FIREBALL_RANGE) {
+    u->face = u->tx >= u->x ? 1 : -1; u->atkAnim = 0.28; u->spellCd = FIREBALL_CD; u->cd = d_max(u->cd, 0.8);
+    double x = u->tx, y = u->ty;
+    fireball(u, x, y);
+    setOrder(u, S_IDLE, 0, 0, 0, 0);
+    return;
+  }
+  if (!u->haspath && !computePathPoint(u)) { setOrder(u, S_IDLE, 0, 0, 0, 0); return; }
+  if (!followPath(u, dt)) setOrder(u, S_IDLE, 0, 0, 0, 0);
+}
+static void orderCast(const int *ids, int n, double x, double y) {
+  for (int i = 0; i < n; i++) {
+    Unit *u = U(ids[i]);
+    if (!u || u->dead || !UDEF[u->type].spell || u->spellCd > 0) continue;
+    setOrder(u, S_CAST, 0, 1, x, y);
+  }
+}
+
 static void updateUnit(Unit *u, double dt) {
   if (u->dead) return;
-  u->cd = d_max(0, u->cd - dt);
+  u->cd = d_max(0, u->cd - dt); u->spellCd = d_max(0, u->spellCd - dt);
   u->atkAnim = d_max(0, u->atkAnim - dt);
   u->moving = 0; u->working = 0; u->anim += dt;
   switch (u->state) {
@@ -1261,6 +1311,7 @@ static void updateUnit(Unit *u, double dt) {
     case S_ATTACK: updateAttack(u, dt); break;
     case S_GATHER: updateGather(u, dt); break;
     case S_BUILD: updateBuild(u, dt); break;
+    case S_CAST: updateCast(u, dt); break;
   }
 }
 
@@ -1419,7 +1470,7 @@ static void aiThink(AI *ai) {
   int id = ai->team; Team *team = &teams[id]; double *R = team->res;
   aiLook(ai);
   static Unit *builders[MAXU], *army[MAXU], *ships[MAXU], *raiders[MAXU];
-  int nR = 0, nArcher = 0, nCav = 0, nWarden = 0, nCat = 0;
+  int nR = 0, nArcher = 0, nCav = 0, nWarden = 0, nCat = 0, nWiz = 0;
   static Bld *myB[MAXB];
   int nB = 0, nbld = 0, nA = 0, nS = 0;
   int nbType[NUM_BLD] = {0}, ndType[NUM_BLD] = {0};
@@ -1445,7 +1496,7 @@ static void aiThink(AI *ai) {
     else if (u->raid && UDEF[u->type].soldier) raiders[nR++] = u;
     else if (UDEF[u->type].soldier && !UDEF[u->type].water) {
       army[nA++] = u;
-      switch (u->type) { case U_SWORDSMAN: nSword++; break; case U_SPEARMAN: nSpear++; break; case U_ARCHER: nArcher++; break; case U_CAVALRY: nCav++; break; case U_WARDEN: nWarden++; break; case U_CATAPULT: nCat++; break; default: break; }
+      switch (u->type) { case U_SWORDSMAN: nSword++; break; case U_SPEARMAN: nSpear++; break; case U_ARCHER: nArcher++; break; case U_CAVALRY: nCav++; break; case U_WARDEN: nWarden++; break; case U_CATAPULT: nCat++; break; case U_WIZARD: nWiz++; break; default: break; }
     }
     if (u->type == U_WARSHIP) ships[nS++] = u;
   }
@@ -1518,17 +1569,20 @@ static void aiThink(AI *ai) {
   /* build order */
   int saveFor = -1;                                    /* building the AI is saving resources for */
   if (buildingNow < 2) {
-    struct { int type; int cond; } want[8] = {
+    struct { int type; int cond; } want[11] = {
       { B_BARRACKS,   nB >= 6 && nbType[B_BARRACKS] < 1 },
       { B_ARCHERY,    ndType[B_BARRACKS] > 0 && nbType[B_ARCHERY] < 1 },
       { B_STABLE,     bt > 140 && nbType[B_STABLE] < 1 },
       { B_BLACKSMITH, bt > 220 && nbType[B_BLACKSMITH] < 1 },
+      { B_WIZARDTOWER, ai->diff >= 1 && bt > 300 && nB >= 12 && nbType[B_WIZARDTOWER] < 1 },
       { B_BARRACKS,   bt > 280 && nB >= 14 && nbType[B_BARRACKS] < 2 },
       { B_ARCHERY,    bt > 380 && nbType[B_ARCHERY] < 2 },
       { B_TOWER,      bt > 330 && nbType[B_TOWER] < i_min(5, 2 + (int)((bt - 330) / 240)) },
       { B_STABLE,     bt > 450 && nbType[B_STABLE] < 2 },
+      { B_LODGE,      ai->diff >= 1 && team->fac == 1 && bt > 260 && nbType[B_LODGE] < 1 },
+      { B_SIEGECAMP,  ai->diff >= 1 && team->fac == 2 && bt > 260 && nbType[B_SIEGECAMP] < 1 },
     };
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 11; i++) {
       if (!want[i].cond) continue;
       if (ai->diff >= 1 && !canAfford(R, BDEF[want[i].type].cost)) { saveFor = want[i].type; break; }   /* save up instead of spending it on units */
       int ok;
@@ -1557,30 +1611,31 @@ static void aiThink(AI *ai) {
   int counter = ai->diff >= 1 && eSold >= 6;
 
   /* training */
+  int wantWiz = 0;
+  if (ai->diff >= 1 && nA >= 8 && nWiz < 1 + ai->waveId && nWiz < 4)
+    for (int i = 0; i < nbld; i++) if (myB[i]->type == B_WIZARDTOWER && myB[i]->done && myB[i]->qlen == 0) wantWiz = 1;
   int wantCat = 0;                                                                    /* Sunhold: keep money for the next catapult */
   if (team->fac == 2 && ai->diff >= 1 && nA >= 8 && nCat < 2 + ai->waveId && nCat < 5)
-    for (int i = 0; i < nbld; i++) if (myB[i]->type == B_BLACKSMITH && myB[i]->done && myB[i]->qlen == 0) wantCat = 1;
+    for (int i = 0; i < nbld; i++) if (myB[i]->type == B_SIEGECAMP && myB[i]->done && myB[i]->qlen == 0) wantCat = 1;
   for (int i = 0; i < nbld; i++) {
     Bld *b = myB[i];
     if (!b->done || b->type == B_TOWNCENTER || BDEF[b->type].trains[0] < 0 || b->qlen >= 2) continue;
     int type = -1;
-    if (b->type == B_BARRACKS) {
-      type = nSword <= nSpear ? U_SWORDSMAN : U_SPEARMAN;
-      if (counter) { if (eCav * 3 >= eSold) type = U_SPEARMAN; else if (eSpear * 2 >= eSold) type = U_SWORDSMAN; }   /* spears stop cavalry, swords beat spears */
+    if (b->type == B_BARRACKS) type = U_SWORDSMAN;
+    else if (b->type == B_ARCHERY) { type = U_ARCHER; if (counter && eCav * 2 >= eSold && nArcher >= 4) type = -1; }     /* no more archers into a cavalry army */
+    else if (b->type == B_LODGE) {                                                    /* Ironwood: wardens screen the archers, and answer cavalry */
+      if (ai->diff >= 1 && (nWarden * 4 < nArcher + 2 || (counter && eCav * 3 >= eSold))) type = U_WARDEN;
     }
-    else if (b->type == B_ARCHERY) {
-      type = U_ARCHER; if (counter && eCav * 2 >= eSold && nArcher >= 4) type = -1;     /* no more archers into a cavalry army */
-      if (team->fac == 1 && ai->diff >= 1) {                                          /* Ironwood: wardens screen the archers, and answer cavalry */
-        if (counter && eCav * 3 >= eSold) type = U_WARDEN;
-        else if (nWarden * 4 < nArcher) type = U_WARDEN;
-      }
-    }
+    else if (b->type == B_WIZARDTOWER) { if (ai->diff >= 1 && nA >= 8 && nWiz < 1 + ai->waveId && nWiz < 4) type = U_WIZARD; }
     else if (b->type == B_STABLE) { type = U_CAVALRY; if (counter && eSpear * 2 >= eSold && nCav >= 3) type = -1; }  /* nor cavalry into spears */
-    else if (b->type == B_BLACKSMITH) {                                               /* Sunhold: a couple of catapults per wave */
-      if (team->fac == 2 && ai->diff >= 1 && nA >= 8 && nCat < 2 + ai->waveId && nCat < 5 && b->qlen == 0) type = U_CATAPULT;
+    else if (b->type == B_SIEGECAMP) {                                                /* Sunhold: a couple of catapults per wave */
+      if (ai->diff >= 1 && nA >= 8 && nCat < 2 + ai->waveId && nCat < 5) type = U_CATAPULT;
     }
     else if (b->type == B_PORT) { if (nS + b->qlen < (id == 1 ? 3 : 2)) type = U_WARSHIP; }
-    if (wantCat && type >= 0 && b->type != B_BLACKSMITH) {
+    if (wantWiz && type >= 0 && b->type != B_WIZARDTOWER) {
+      for (int k = 0; k < 4; k++) if (UDEF[U_WIZARD].cost[k] > 0 && UDEF[type].cost[k] > 0 && R[k] < UDEF[U_WIZARD].cost[k] + UDEF[type].cost[k]) { type = -1; break; }
+    }
+    if (wantCat && type >= 0 && b->type != B_SIEGECAMP) {
       for (int k = 0; k < 4; k++) if (UDEF[U_CATAPULT].cost[k] > 0 && UDEF[type].cost[k] > 0 && R[k] < UDEF[U_CATAPULT].cost[k] + UDEF[type].cost[k]) { type = -1; break; }
     }
     if (type >= 0 && saveFor >= 0 && nA >= 12) {                       /* leave enough of what the planned building needs */
@@ -1588,6 +1643,13 @@ static void aiThink(AI *ai) {
     }
     if (type >= 0) queueUnit(b, type);
     b->hasRally = 1; b->rx = ai->rx; b->ry = ai->ry; b->rtarget = 0;
+  }
+  for (int i = 0; i < nbld; i++) {                                                    /* spearmen come from the Town Center, once its builder queue is empty */
+    Bld *b = myB[i];
+    if (b->type != B_TOWNCENTER || !b->done || b->qlen || nA >= 150) continue;
+    int want = nSpear < nSword || (counter && eCav * 3 >= eSold && nSpear < nSword + 4);
+    if (counter && eSpear * 2 >= eSold && nSpear >= 3) want = 0;                      /* swords beat spears */
+    if (want && nB >= 8 && !(saveFor >= 0 && nA >= 12)) queueUnit(b, U_SPEARMAN);
   }
   for (int i = 0; i < nbld; i++) {
     Bld *b = myB[i];
@@ -1601,6 +1663,21 @@ static void aiThink(AI *ai) {
       int c[4]; techCost(t, lvl, c);
       if (R[R_FOOD] >= c[R_FOOD] + 150 && R[R_GOLD] >= c[R_GOLD] + 100) { queueTech(b, t); break; }
     }
+  }
+
+  /* wizards: cast Fireball where the most known enemies stand together */
+  for (int i = 0; i < nA; i++) {
+    Unit *w = army[i];
+    if (!UDEF[w->type].spell || w->spellCd > 0 || w->state == S_CAST) continue;
+    double bx = 0, by = 0; int best = 0;
+    for (int j = 0; j < MAXU; j++) {
+      const Unit *e = &units[j];
+      if (!e->id || e->dead || e->team == id || !aiKnowsUnit(ai, e) || d_hypot(e->x - w->x, e->y - w->y) > FIREBALL_RANGE - 0.5) continue;
+      int c = 0;
+      for (int k = 0; k < MAXU; k++) { const Unit *f = &units[k]; if (f->id && !f->dead && f->team != id && d_hypot(f->x - e->x, f->y - e->y) <= FIREBALL_RADIUS - 0.4) c++; }
+      if (c > best) { best = c; bx = e->x; by = e->y; }
+    }
+    if (best >= 3 || (best >= 2 && ai->diff == 2)) { int one[1] = { w->id }; orderCast(one, 1, bx, by); }
   }
 
   /* defense */
@@ -1867,6 +1944,7 @@ EXPORT("g_idbuf") int *g_idbuf(void) { return cmdIds; }
 EXPORT("g_idbuf_len") int g_idbuf_len(void) { return MAXORD; }
 
 EXPORT("g_order_move") void g_order_move(int n, double x, double y, int attackMove) { orderMove(cmdIds, n, x, y, attackMove); }
+EXPORT("g_order_cast") void g_order_cast(int n, double x, double y) { orderCast(cmdIds, n, x, y); }     /* wizards: Fireball at a point */
 EXPORT("g_order_stop") void g_order_stop(int n) { orderStop(cmdIds, n); }
 EXPORT("g_order_attack") void g_order_attack(int n, int target) { orderAttack(cmdIds, n, target); }
 EXPORT("g_order_build") void g_order_build(int n, int bid) { orderBuild(cmdIds, n, bid); }
@@ -1882,7 +1960,7 @@ EXPORT("g_set_rally") void g_set_rally(int bid, double x, double y, int target) 
 EXPORT("g_winner") int g_winner(void) { return winner; }
 
 /* ---- snapshot: flat float arrays the renderer reads ---- */
-#define U_STRIDE 20
+#define U_STRIDE 21
 #define N_STRIDE 6
 #define P_STRIDE 8
 #define E_STRIDE 9
@@ -1915,7 +1993,7 @@ EXPORT("g_snapshot") void g_snapshot(void) {
     (void)t;
     o[0] = u->id; o[1] = u->type; o[2] = u->team; o[3] = (float)u->x; o[4] = (float)u->y; o[5] = (float)u->hp; o[6] = (float)u->maxHp;
     o[7] = u->state; o[8] = u->face; o[9] = (float)u->anim; o[10] = u->moving; o[11] = u->working; o[12] = (float)u->carry;
-    o[13] = u->carryType; o[14] = u->gatherKind; o[15] = u->sub; o[16] = (float)u->atkAnim; o[17] = (float)u->cd; o[18] = td; o[19] = u->target;
+    o[13] = u->carryType; o[14] = u->gatherKind; o[15] = u->sub; o[16] = (float)u->atkAnim; o[17] = (float)u->cd; o[18] = td; o[19] = u->target; o[20] = (float)u->spellCd;
   }
   for (int i = 0; i < MAXB; i++) {
     const Bld *b = &blds[i];

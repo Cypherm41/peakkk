@@ -318,7 +318,41 @@ int main(int argc, char **argv) {
     int cat = 0; for (int i = 0; i < nUnits; i++) if (mUnits[i].type == U_CATAPULT && mUnits[i].team == 0) cat = mUnits[i].id;
     float sx = isoX(15.5f, 36.5f), sy = isoY(15.5f, 36.5f) - 6; (void)sx; (void)sy;
     CHECK(cat != 0, "the catapult can be found to select");
-    int smith = 0; for (int i = 0; i < nBlds; i++) if (mBlds[i].team == 0 && mBlds[i].type == B_BLACKSMITH) smith = mBlds[i].id; (void)smith; }
+  }
+  /* ---- builder card pages, Town Center spearmen, wizard Fireball ---- */
+  {
+    facChoice = 1; ui_start_game(1, 777); step(3);                          /* Legion */
+    int bid = 0, tcid = 0; for (int i = 0; i < nUnits; i++) if (mUnits[i].team == 0 && mUnits[i].type == U_BUILDER) { bid = mUnits[i].id; break; }
+    for (int i = 0; i < nBlds; i++) if (mBlds[i].team == 0 && mBlds[i].type == B_TOWNCENTER) tcid = mBlds[i].id;
+    sel_one(bid); step(2);
+    CHECK(curCmds[10].kind == CK_PAGE && curCmds[0].kind == CK_BUILD && curCmds[0].arg == B_HOUSE, "builder card: page one has the common buildings and a More button");
+    key(SDL_SCANCODE_C, 0); step(2);
+    CHECK(buildPage == 1 && curCmds[0].arg == B_SIEGECAMP && curCmds[1].arg == B_WIZARDTOWER && curCmds[2].kind == CK_NONE, "Legion page two: Siege Camp and Wizard Tower, no Hunters Lodge");
+    sel_clear(); sel_one(bid); step(2);
+    CHECK(buildPage == 0, "changing the selection returns to page one");
+    facChoice = 0; ui_start_game(1, 777); step(3);                          /* Rangers */
+    for (int i = 0; i < nUnits; i++) if (mUnits[i].team == 0 && mUnits[i].type == U_BUILDER) { bid = mUnits[i].id; break; }
+    sel_one(bid); step(1); buildPage = 1; step(2);
+    CHECK(curCmds[0].arg == B_LODGE && curCmds[1].arg == B_WIZARDTOWER, "Rangers page two: Hunters Lodge and Wizard Tower");
+    buildPage = 0;
+    for (int i = 0; i < nBlds; i++) if (mBlds[i].team == 0 && mBlds[i].type == B_TOWNCENTER) tcid = mBlds[i].id;
+    sel_one(tcid); step(2);
+    CHECK(curCmds[0].kind == CK_TRAIN && curCmds[0].arg == U_BUILDER && curCmds[1].kind == CK_TRAIN && curCmds[1].arg == U_SPEARMAN, "Town Center card trains builders and spearmen");
+    int wz = g_debug_spawn(0, U_WIZARD, 20.5, 36.5), en = g_debug_spawn(1, U_SWORDSMAN, 25.5, 36.5); model_sync(); step(1);
+    sel_one(wz); step(2);
+    CHECK(curCmds[6].kind == CK_CAST && curCmds[6].enabled, "a selected wizard gets a ready Fireball button");
+    key(SDL_SCANCODE_D, 0);
+    CHECK(cmdCast, "D enters Fireball targeting");
+    const FUnit *e0 = get_unit(en); float hp0 = e0 ? e0->hp : 0;
+    centerCam(23.0f, 36.5f); step(2);
+    float sxs, sys; w2s(25.5f, 36.5f, &sxs, &sys); click(SDL_BUTTON_LEFT, (int)sxs, (int)sys, 0);
+    for (int i = 0; i < 12; i++) step(1);
+    const FUnit *e1 = get_unit(en);
+    CHECK(!cmdCast, "the click leaves targeting mode");
+    CHECK(e1 == NULL || e1->hp < hp0 - 20, "Fireball from the UI hurts the enemy");
+    sel_one(wz); step(2);
+    CHECK(curCmds[6].kind == CK_CAST && !curCmds[6].enabled, "Fireball button is greyed out while cooling down");
+  }
   /* ---- save and load (to a throwaway file, never the player's real save) ---- */
   {
     const char *tmp = "/tmp/peakkk_smoke.sav";
